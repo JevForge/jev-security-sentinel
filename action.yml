@@ -155,6 +155,8 @@ outputs:
     description: Workspace file containing findings when the output would exceed the size limit.
   findings_count:
     description: Number of preserved findings.
+  top_findings:
+    description: JSON array of up to 10 prioritized in-scope findings (compact).
   findings_spilled:
     description: true when findings were written to findings_file.
   risk_summary:
