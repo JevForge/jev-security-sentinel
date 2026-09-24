@@ -36348,6 +36348,8 @@ var RunOptionsSchema = external_exports.object({
   comment_on_github: external_exports.boolean().default(false),
   create_check_run: external_exports.boolean().default(true),
   enrich_epss_kev: external_exports.boolean().default(false),
+  write_sarif: external_exports.boolean().default(false),
+  write_report_artifact: external_exports.boolean().default(false),
   annotate: external_exports.boolean().default(true),
   max_findings: external_exports.number().int().positive().max(5e3).default(2e3),
   max_findings_to_jev: external_exports.number().int().positive().max(100).default(40),
@@ -52904,6 +52906,100 @@ async function maybeCreateCheckRun(enabled, dryRun, headSha, decision, actionSta
   return "created";
 }
 
+// src/executors/artifacts.ts
+var import_node_fs5 = require("node:fs");
+var import_node_path4 = require("node:path");
+function sarifLevel(finding) {
+  if (finding.gate_effect === "blocking" || finding.severity === "critical" || finding.severity === "high") {
+    return "error";
+  }
+  if (finding.gate_effect === "review" || finding.severity === "medium") return "warning";
+  return "note";
+}
+function buildSarif(decision) {
+  const results = decision.findings.map((finding) => {
+    const location = finding.path != null ? {
+      physicalLocation: {
+        artifactLocation: { uri: finding.path.replace(/\\/g, "/") },
+        ...finding.start_line ? { region: { startLine: finding.start_line } } : {}
+      }
+    } : void 0;
+    return {
+      ruleId: finding.rule_id,
+      level: sarifLevel(finding),
+      message: { text: `${finding.severity} ${finding.category}: ${finding.title}`.slice(0, 400) },
+      properties: {
+        fingerprint: finding.fingerprint,
+        gate_effect: finding.gate_effect,
+        cve: finding.cve,
+        kev: finding.kev,
+        epss: finding.epss,
+        source: finding.source
+      },
+      ...location ? { locations: [location] } : {}
+    };
+  });
+  return {
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+    version: "2.1.0",
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "JEV Security Sentinel",
+            informationUri: "https://github.com/JevForge/jev-security-sentinel",
+            rules: []
+          }
+        },
+        results
+      }
+    ]
+  };
+}
+function buildMarkdownReport(decision) {
+  const top = prioritizeFindings(decision.findings).slice(0, 25);
+  const lines = [
+    "# JEV Security Sentinel report",
+    "",
+    `- Decision: \`${decision.decision}\``,
+    `- Policy floor: \`${decision.policy_floor}\``,
+    `- Jev: \`${decision.jev_proposed ?? decision.jev_status}\` (confidence ${decision.confidence.toFixed(3)})`,
+    `- Findings: ${decision.risk_summary.total} total / ${decision.risk_summary.blocking} blocking`,
+    `- Reasons: ${decision.reason_codes.join(", ") || "none"}`,
+    "",
+    "| Severity | Category | Rule | Path | Gate |",
+    "| --- | --- | --- | --- | --- |"
+  ];
+  for (const finding of top) {
+    const path = finding.path ? `${finding.path}${finding.start_line ? `:${finding.start_line}` : ""}` : "n/a";
+    lines.push(
+      `| ${finding.severity} | ${finding.category} | ${finding.rule_id.replaceAll("|", "/")} | ${path.replaceAll("|", "/")} | ${finding.gate_effect} |`
+    );
+  }
+  lines.push("", "_Every collected finding stays visible. Allowlisting changes the gate effect only._");
+  return lines.join("\n");
+}
+function writeArtifactReports(input) {
+  const dir = (0, import_node_path4.join)(input.workspace, ".jev");
+  (0, import_node_fs5.mkdirSync)(dir, { recursive: true });
+  let sarifPath = null;
+  let markdownPath = null;
+  let jsonPath = null;
+  if (input.writeSarif) {
+    sarifPath = (0, import_node_path4.join)(dir, "security-sentinel.sarif");
+    (0, import_node_fs5.writeFileSync)(sarifPath, JSON.stringify(buildSarif(input.decision), null, 2));
+  }
+  if (input.writeMarkdown) {
+    markdownPath = (0, import_node_path4.join)(dir, "security-sentinel-report.md");
+    (0, import_node_fs5.writeFileSync)(markdownPath, buildMarkdownReport(input.decision));
+  }
+  if (input.writeJson) {
+    jsonPath = (0, import_node_path4.join)(dir, "security-sentinel-report.json");
+    (0, import_node_fs5.writeFileSync)(jsonPath, JSON.stringify(input.decision, null, 2));
+  }
+  return { sarifPath, markdownPath, jsonPath };
+}
+
 // src/run.ts
 async function runSentinel(params) {
   const options = RunOptionsSchema.parse(params.options);
@@ -52974,19 +53070,27 @@ async function runSentinel(params) {
     outcome.action_status,
     params.checkRunClient ?? null
   );
+  const artifactPaths = !options.dry_run && params.workspace && (options.write_sarif || options.write_report_artifact) ? writeArtifactReports({
+    workspace: params.workspace,
+    decision: outcome.decision,
+    writeSarif: options.write_sarif,
+    writeMarkdown: options.write_report_artifact,
+    writeJson: options.write_report_artifact
+  }) : { sarifPath: null, markdownPath: null, jsonPath: null };
   return {
     decision: outcome.decision,
     outcome,
     effects,
     commentStatus,
     checkStatus,
+    artifactPaths,
     findings: outcome.decision.findings
   };
 }
 
 // src/github/outputs.ts
-var import_node_fs5 = require("node:fs");
-var import_node_path4 = require("node:path");
+var import_node_fs6 = require("node:fs");
+var import_node_path5 = require("node:path");
 var OUTPUT_LIMIT = 6e4;
 var TOP_FINDINGS_LIMIT = 10;
 var LOG_PREFIX = "[JEV Security Sentinel]";
@@ -53032,10 +53136,10 @@ function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
     `${decision.decision} floor=${decision.policy_floor} jev=${decision.jev_proposed ?? decision.jev_status} findings=${decision.findings.length}`
   );
   if (spilled && workspace) {
-    const dir = (0, import_node_path4.join)(workspace, ".jev");
-    (0, import_node_fs5.mkdirSync)(dir, { recursive: true });
-    const file = (0, import_node_path4.join)(dir, "security-sentinel-findings.json");
-    (0, import_node_fs5.writeFileSync)(file, findingsJson);
+    const dir = (0, import_node_path5.join)(workspace, ".jev");
+    (0, import_node_fs6.mkdirSync)(dir, { recursive: true });
+    const file = (0, import_node_path5.join)(dir, "security-sentinel-findings.json");
+    (0, import_node_fs6.writeFileSync)(file, findingsJson);
     writer.setOutput("findings", "");
     writer.setOutput("findings_file", file);
   } else {
@@ -53096,6 +53200,8 @@ async function main() {
   const comment = optionalBoolean("comment_on_github", config2.comment_on_github ?? false);
   const createCheckRun = optionalBoolean("create_check_run", config2.create_check_run ?? true);
   const enrichEpssKev = optionalBoolean("enrich_epss_kev", false);
+  const writeSarif = optionalBoolean("write_sarif", false);
+  const writeReportArtifact = optionalBoolean("write_report_artifact", false);
   const annotate = optionalBoolean("annotate", config2.annotate ?? true);
   const token = core.getInput("github_token") || process.env.GITHUB_TOKEN || "";
   const remoteErrors = [];
@@ -53310,6 +53416,7 @@ async function main() {
     }
   } : null;
   const result = await runSentinel({
+    workspace,
     rawFindings: loaded.findings,
     sourceErrors: [...loaded.errors, ...remoteErrors],
     truncated: loaded.truncated,
@@ -53338,6 +53445,8 @@ async function main() {
       comment_on_github: comment,
       create_check_run: createCheckRun,
       enrich_epss_kev: enrichEpssKev,
+      write_sarif: writeSarif,
+      write_report_artifact: writeReportArtifact,
       annotate,
       max_findings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
       max_findings_to_jev: Number(core.getInput("max_findings_to_jev") || config2.max_findings_to_jev || 40),
@@ -53354,6 +53463,9 @@ async function main() {
   };
   writeDecisionOutputs(writer, result.decision, result.outcome.action_status, workspace);
   core.setOutput("check_status", result.checkStatus);
+  core.setOutput("sarif_file", result.artifactPaths.sarifPath ?? "");
+  core.setOutput("report_markdown_file", result.artifactPaths.markdownPath ?? "");
+  core.setOutput("report_json_file", result.artifactPaths.jsonPath ?? "");
   if (!dryRun) {
     for (const annotation of result.effects.annotations) {
       const payload = {
