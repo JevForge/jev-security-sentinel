@@ -312,6 +312,7 @@ export const RunOptionsSchema = z.object({
   enrich_epss_kev: z.boolean().default(false),
   write_sarif: z.boolean().default(false),
   write_report_artifact: z.boolean().default(false),
+  request_reviewers: z.string().optional(),
   annotate: z.boolean().default(true),
   max_findings: z.number().int().positive().max(5000).default(2000),
   max_findings_to_jev: z.number().int().positive().max(100).default(40),

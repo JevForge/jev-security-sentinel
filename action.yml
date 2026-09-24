@@ -137,6 +137,9 @@ inputs:
     description: Write markdown and JSON decision reports under .jev/.
     required: false
     default: 'false'
+  request_reviewers:
+    description: Comma/newline list of GitHub users or team:slug reviewers to request on the PR.
+    required: false
   annotate:
     description: Emit workflow annotations for in-scope findings.
     required: false

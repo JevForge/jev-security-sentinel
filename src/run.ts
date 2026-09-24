@@ -5,6 +5,7 @@ import { planEffects, type PlannedEffects } from './executors/effects.js';
 import { maybePostComment, type CommentClient } from './executors/comment.js';
 import { maybeCreateCheckRun, type CheckRunClient } from './executors/check-run.js';
 import { writeArtifactReports } from './executors/artifacts.js';
+import { maybeRequestReviewers, type ReviewerClient } from './executors/reviewers.js';
 import type { EnrichmentMaps } from './collectors/enrichment.js';
 import type { JevProvider } from './jev/core/index.js';
 import type { RawFinding } from './collectors/common.js';
@@ -30,6 +31,7 @@ export interface RunSentinelParams {
   provider: JevProvider;
   commentClient?: CommentClient | null;
   checkRunClient?: CheckRunClient | null;
+  reviewerClient?: ReviewerClient | null;
   headSha?: string | null;
 }
 
@@ -39,6 +41,7 @@ export interface RunSentinelResult {
   effects: PlannedEffects;
   commentStatus: 'posted' | 'updated' | 'dry-run' | 'skipped';
   checkStatus: 'created' | 'dry-run' | 'skipped';
+  reviewerStatus: 'requested' | 'dry-run' | 'skipped';
   artifactPaths: { sarifPath: string | null; markdownPath: string | null; jsonPath: string | null };
   findings: Finding[];
 }
@@ -131,12 +134,23 @@ export async function runSentinel(params: RunSentinelParams): Promise<RunSentine
         })
       : { sarifPath: null, markdownPath: null, jsonPath: null };
 
+  const reviewerStatus = await maybeRequestReviewers(
+    Boolean(options.request_reviewers?.trim()) &&
+      (outcome.decision.decision === 'BLOCK' ||
+        outcome.decision.decision === 'REVIEW' ||
+        outcome.action_status === 'request-review'),
+    options.dry_run,
+    options.request_reviewers,
+    params.reviewerClient ?? null,
+  );
+
   return {
     decision: outcome.decision,
     outcome,
     effects,
     commentStatus,
     checkStatus,
+    reviewerStatus,
     artifactPaths,
     findings: outcome.decision.findings,
   };

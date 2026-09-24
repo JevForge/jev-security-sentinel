@@ -306,6 +306,22 @@ async function main(): Promise<void> {
       }
     : null;
 
+  const pullRequestNumber = github.context.payload.pull_request?.number;
+  const reviewerClient =
+    octokit && pullRequestNumber
+      ? {
+          async requestReviewers(input: { reviewers: string[]; teamReviewers: string[] }) {
+            await octokit.rest.pulls.requestReviewers({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              pull_number: Number(pullRequestNumber),
+              reviewers: input.reviewers,
+              team_reviewers: input.teamReviewers,
+            });
+          },
+        }
+      : null;
+
   const result = await runSentinel({
     workspace,
     rawFindings: loaded.findings,
@@ -318,6 +334,7 @@ async function main(): Promise<void> {
     provider,
     commentClient,
     checkRunClient,
+    reviewerClient,
     headSha,
     options: {
       environment,
@@ -338,6 +355,7 @@ async function main(): Promise<void> {
       enrich_epss_kev: enrichEpssKev,
       write_sarif: writeSarif,
       write_report_artifact: writeReportArtifact,
+      request_reviewers: core.getInput('request_reviewers') || undefined,
       annotate: annotate,
       max_findings: Number(core.getInput('max_findings') || config.max_findings || 2000),
       max_findings_to_jev: Number(core.getInput('max_findings_to_jev') || config.max_findings_to_jev || 40),
@@ -376,6 +394,7 @@ async function main(): Promise<void> {
   }
   core.info(formatActionMessage(`Comment: ${result.commentStatus}`));
   core.info(formatActionMessage(`Check run: ${result.checkStatus}`));
+  core.info(formatActionMessage(`Reviewers: ${result.reviewerStatus}`));
   core.info(formatActionMessage(`Effects: ${result.effects.effects.join(',')}`));
 }
 
