@@ -11,6 +11,7 @@ import { runSentinel } from './run.js';
 import { writeDecisionOutputs, formatActionMessage } from './github/outputs.js';
 import type { SourceError } from './schemas/sentinel.js';
 import { GATE_MODES } from './schemas/enums.js';
+import { POLICY_PACKS } from './decision/packs.js';
 function optionalBoolean(name: string, fallback: boolean): boolean {
   const raw = core.getInput(name);
   if (!raw) return fallback;
@@ -43,7 +44,10 @@ async function main(): Promise<void> {
   const lowConfidence = coalescePolicy(core.getInput('low_confidence_policy') || undefined, config);
   const reviewMode = coalesceReviewMode(core.getInput('review_mode') || undefined, config);
   const sourceErrorPolicy = coalesceSourceErrors(core.getInput('source_error_policy') || undefined, config);
-  const policy = policyFromConfig(config);
+  const policy = policyFromConfig(
+    config,
+    pickEnum(core.getInput('policy_pack') || undefined, config.policy_pack ?? 'default', POLICY_PACKS, 'policy_pack'),
+  );
   const timeoutMs = Number(core.getInput('timeout_ms') || 45_000);
   const dryRun = optionalBoolean('dry_run', false);
   const comment = optionalBoolean('comment_on_github', config.comment_on_github ?? false);
