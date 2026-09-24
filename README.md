@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JevForge/jev-security-sentinel@main
+      - uses: JevForge/jev-security-sentinel@v0.1.0
         with:
           sarif_path: reports/results.sarif
           environment: production
@@ -50,7 +50,7 @@ jobs:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
 ```
 
-Pin a commit SHA in production. `@main` tracks the default branch. After the first `v*` release, pin that major or minor tag.
+Pin `@v0.1.0`, the floating major `@v0`, or a commit SHA.
 
 ## Inputs
 

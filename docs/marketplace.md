@@ -1,11 +1,12 @@
 # Marketplace listing
 
-This repository is prepared for GitHub Marketplace and is **not published**.
-
 - Listing name: JEV Security Sentinel
+- Short description (≤125 chars): `Contextual gate for SAST, SCA, IaC, secrets, and containers. Jev returns PASS, WARN, BLOCK, or REVIEW.`
 - Primary category: Security
-- Icon and color: shield / red, already set in `action.yml`
-- Pricing: free, MIT license
-- Version to publish: the major tag (`v1`) after a tested release
+- Secondary category: Continuous integration
+- Branding: shield / red (`action.yml`)
+- Pricing: free, MIT
 
-Do not submit the listing until the maintainers explicitly approve publication. A release workflow creates a GitHub Release for `v*` tags; it does not call the Marketplace API.
+GitHub has no public API for the **Publish this Action to the GitHub Marketplace** checkbox. After `v0.1.0` exists, open the release page, tick that box (requires org Marketplace Developer Agreement + 2FA), choose the categories above, and publish.
+
+Later version tags keep the listing; they do not need the checkbox again unless you re-feature a release.

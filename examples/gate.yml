@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JevForge/jev-security-sentinel@main
+      - uses: JevForge/jev-security-sentinel@v0.1.0
         with:
           sarif_path: reports/semgrep.sarif
           trivy_path: reports/trivy.json
