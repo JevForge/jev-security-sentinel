@@ -9,7 +9,7 @@ await build({
   target: 'node24',
   format: 'cjs',
   outfile: 'dist/index.js',
-  sourcemap: true,
+  sourcemap: false,
   legalComments: 'none',
   packages: 'bundle',
   logLevel: 'info',
