@@ -1,13 +1,15 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { loadFileConfig, policyFromConfig, coalesceEnvironment, coalescePolicy, coalesceProvider, coalesceReviewMode, coalesceScope, coalesceSourceErrors } from './collectors/config.js';
+import { loadFileConfig, policyFromConfig, coalesceEnvironment, coalescePolicy, coalesceProvider, coalesceReviewMode, coalesceScope, coalesceSourceErrors, pickEnum } from './collectors/config.js';
 import { loadFindings } from './collectors/load.js';
+import { loadBaselineFingerprints } from './collectors/baseline.js';
 import { listChangedPaths } from './collectors/github-context.js';
 import { fetchGhasAlerts, fetchSemgrepFindings, fetchSnykIssues, fetchVeracodeFindings, safeRemoteMessage } from './collectors/remote.js';
 import { createJevProvider } from './jev/factory.js';
 import { runSentinel } from './run.js';
 import { writeDecisionOutputs, formatActionMessage } from './github/outputs.js';
 import type { SourceError } from './schemas/sentinel.js';
+import { GATE_MODES } from './schemas/enums.js';
 function optionalBoolean(name: string, fallback: boolean): boolean {
   const raw = core.getInput(name);
   if (!raw) return fallback;
@@ -30,6 +32,12 @@ async function main(): Promise<void> {
     core.getInput('gate_scope') || undefined,
     config,
     onPullRequest ? 'changed' : 'all',
+  );
+  const gateMode = pickEnum(
+    core.getInput('gate_mode') || undefined,
+    config.gate_mode ?? 'all',
+    GATE_MODES,
+    'gate_mode',
   );
   const lowConfidence = coalescePolicy(core.getInput('low_confidence_policy') || undefined, config);
   const reviewMode = coalesceReviewMode(core.getInput('review_mode') || undefined, config);
@@ -172,6 +180,23 @@ async function main(): Promise<void> {
     remote,
   });
 
+  let baselineFingerprints = new Set<string>();
+  const baselinePath = core.getInput('baseline_path') || undefined;
+  if (gateMode === 'new_only') {
+    if (!baselinePath) {
+      remoteErrors.push({
+        source: 'baseline',
+        message: 'gate_mode=new_only requires baseline_path',
+      });
+    } else {
+      const baseline = loadBaselineFingerprints(workspace, baselinePath);
+      baselineFingerprints = baseline.fingerprints;
+      if (baseline.error) {
+        remoteErrors.push({ source: 'baseline', message: baseline.error });
+      }
+    }
+  }
+
   core.info(formatActionMessage(`Jev provider: ${jevProvider}`));
   core.info(
     formatActionMessage(
@@ -209,12 +234,14 @@ async function main(): Promise<void> {
     truncated: loaded.truncated,
     policy,
     changedPaths,
+    baselineFingerprints,
     provider,
     commentClient,
     options: {
       environment,
       component: core.getInput('component') || config.component || '',
       gate_scope: gateScope,
+      gate_mode: gateMode,
       min_confidence: Number(core.getInput('min_confidence') || config.min_confidence || 0.75),
       low_confidence_policy: lowConfidence,
       source_error_policy: sourceErrorPolicy,

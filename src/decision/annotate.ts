@@ -1,4 +1,11 @@
-import type { EnvironmentName, Exploitability, GateEffect, GateScope, Severity } from '../schemas/enums.js';
+import type {
+  EnvironmentName,
+  Exploitability,
+  GateEffect,
+  GateMode,
+  GateScope,
+  Severity,
+} from '../schemas/enums.js';
 import type { Finding, GatePolicy } from '../schemas/sentinel.js';
 import type { RawFinding } from '../collectors/common.js';
 import { fingerprint } from '../utils/fingerprint.js';
@@ -58,8 +65,12 @@ export function annotateFindings(input: {
   environment: EnvironmentName;
   component: string;
   gateScope: GateScope;
+  gateMode?: GateMode;
+  baselineFingerprints?: Set<string>;
   changedPaths: string[] | null;
 }): Finding[] {
+  const gateMode = input.gateMode ?? 'all';
+  const baseline = input.baselineFingerprints ?? new Set<string>();
   const seen = new Map<string, number>();
   return input.raw.map(raw => {
     const exploitability: Exploitability =
@@ -87,8 +98,10 @@ export function annotateFindings(input: {
       matchesAnyGlob(input.policy.allowlist.paths, raw.path);
     const inChange = pathInChange(raw.path, input.changedPaths);
     const outOfScope = excluded || (input.gateScope === 'changed' && !inChange);
+    const baselineMatched = gateMode === 'new_only' && baseline.has(baseId);
     let gateEffect: GateEffect = 'informational';
     if (allowlisted) gateEffect = 'allowlisted';
+    else if (baselineMatched) gateEffect = 'baseline';
     else if (outOfScope) gateEffect = 'out_of_scope';
     else if (raw.category === 'secrets' && input.policy.block_secrets) gateEffect = 'blocking';
     else {
@@ -116,6 +129,7 @@ export function annotateFindings(input: {
       in_change: inChange,
       allowlisted,
       excluded,
+      baseline_matched: baselineMatched,
       gate_effect: gateEffect,
       message: raw.message,
     };

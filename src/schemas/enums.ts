@@ -49,6 +49,9 @@ export type EnvironmentName = (typeof ENVIRONMENTS)[number];
 export const GATE_SCOPES = ['all', 'changed'] as const;
 export type GateScope = (typeof GATE_SCOPES)[number];
 
+export const GATE_MODES = ['all', 'new_only'] as const;
+export type GateMode = (typeof GATE_MODES)[number];
+
 export const JEV_PROVIDERS = [
   'vercel-ai-gateway',
   'typesafe-native',
@@ -71,6 +74,7 @@ export const GATE_EFFECTS = [
   'review',
   'allowlisted',
   'out_of_scope',
+  'baseline',
   'informational',
 ] as const;
 export type GateEffect = (typeof GATE_EFFECTS)[number];
@@ -111,6 +115,8 @@ export const REASON_CODES = [
   'SOURCE_UNAVAILABLE',
   'CHANGED_PATHS_UNKNOWN',
   'BLOCK_SECRETS',
+  'BASELINE_MATCHED',
+  'NEW_FINDINGS_ONLY',
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -125,6 +131,7 @@ export const EFFECT_RANK: Record<GateEffect, number> = {
   informational: 0,
   out_of_scope: 0,
   allowlisted: 0,
+  baseline: 0,
   warning: 1,
   review: 2,
   blocking: 3,

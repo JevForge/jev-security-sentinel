@@ -79,6 +79,10 @@ function buildReasons(input: {
   }
   if (inScope.some(finding => finding.in_change)) pushCode(codes, 'CHANGED_CODE');
   if (input.findings.some(finding => finding.allowlisted)) pushCode(codes, 'ALLOWLIST_APPLIED');
+  if (input.findings.some(finding => finding.baseline_matched || finding.gate_effect === 'baseline')) {
+    pushCode(codes, 'BASELINE_MATCHED');
+    pushCode(codes, 'NEW_FINDINGS_ONLY');
+  }
   if (input.floor === 'BLOCK') pushCode(codes, 'POLICY_FLOOR_BLOCK');
   if (input.floor === 'WARN') pushCode(codes, 'POLICY_FLOOR_WARN');
   if (input.floor === 'REVIEW') pushCode(codes, 'POLICY_FLOOR_REVIEW');
@@ -111,6 +115,7 @@ function summarize(findings: Finding[], errors: SourceError[], truncated: boolea
   let review = 0;
   let allowlisted = 0;
   let outOfScope = 0;
+  let baseline = 0;
   let inScope = 0;
   let highest: Finding['severity'] | 'none' = 'none';
   const rank: Record<Finding['severity'], number> = {
@@ -130,6 +135,7 @@ function summarize(findings: Finding[], errors: SourceError[], truncated: boolea
     if (finding.gate_effect === 'review') review += 1;
     if (finding.gate_effect === 'allowlisted') allowlisted += 1;
     if (finding.gate_effect === 'out_of_scope') outOfScope += 1;
+    if (finding.gate_effect === 'baseline') baseline += 1;
     if (
       finding.gate_effect === 'blocking' ||
       finding.gate_effect === 'warning' ||
@@ -146,6 +152,7 @@ function summarize(findings: Finding[], errors: SourceError[], truncated: boolea
     review,
     allowlisted,
     out_of_scope: outOfScope,
+    baseline,
     by_severity: bySeverity,
     by_category: byCategory,
     highest_severity: highest,
