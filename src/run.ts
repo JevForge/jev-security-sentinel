@@ -3,6 +3,7 @@ import { applyGate, floorDecision, type GateOutcome } from './decision/policy.js
 import { prioritizeFindings, sampleForJev } from './decision/prioritize.js';
 import { planEffects, type PlannedEffects } from './executors/effects.js';
 import { maybePostComment, type CommentClient } from './executors/comment.js';
+import { maybeCreateCheckRun, type CheckRunClient } from './executors/check-run.js';
 import type { JevProvider } from './jev/types.js';
 import type { RawFinding } from './collectors/common.js';
 import {
@@ -24,13 +25,16 @@ export interface RunSentinelParams {
   baselineFingerprints?: Set<string>;
   provider: JevProvider;
   commentClient?: CommentClient | null;
+  checkRunClient?: CheckRunClient | null;
+  headSha?: string | null;
 }
 
 export interface RunSentinelResult {
   decision: SentinelDecision;
   outcome: GateOutcome;
   effects: PlannedEffects;
-  commentStatus: 'posted' | 'dry-run' | 'skipped';
+  commentStatus: 'posted' | 'updated' | 'dry-run' | 'skipped';
+  checkStatus: 'created' | 'dry-run' | 'skipped';
   findings: Finding[];
 }
 
@@ -89,6 +93,7 @@ export async function runSentinel(params: RunSentinelParams): Promise<RunSentine
     actionStatus: outcome.action_status,
     annotate: options.annotate,
     comment: options.comment_on_github,
+    checkRun: options.create_check_run,
   });
 
   const commentStatus = await maybePostComment(
@@ -98,11 +103,21 @@ export async function runSentinel(params: RunSentinelParams): Promise<RunSentine
     params.commentClient ?? null,
   );
 
+  const checkStatus = await maybeCreateCheckRun(
+    options.create_check_run,
+    options.dry_run,
+    params.headSha ?? null,
+    outcome.decision,
+    outcome.action_status,
+    params.checkRunClient ?? null,
+  );
+
   return {
     decision: outcome.decision,
     outcome,
     effects,
     commentStatus,
+    checkStatus,
     findings: outcome.decision.findings,
   };
 }

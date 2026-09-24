@@ -1,7 +1,11 @@
 import type { SentinelDecision } from '../schemas/sentinel.js';
 
+/** Stable marker so re-runs update one PR comment instead of stacking. */
+export const COMMENT_MARKER = '<!-- jev-security-sentinel -->';
+
 export function buildCommentMarkdown(decision: SentinelDecision): string {
   const lines = [
+    COMMENT_MARKER,
     '### JEV Security Sentinel',
     '',
     `- **Decision:** \`${decision.decision}\``,
@@ -30,7 +34,9 @@ export function buildCommentMarkdown(decision: SentinelDecision): string {
 }
 
 export interface CommentClient {
+  listComments(): Promise<Array<{ id: number; body: string }>>;
   createComment(body: string): Promise<void>;
+  updateComment(id: number, body: string): Promise<void>;
 }
 
 export async function maybePostComment(
@@ -38,9 +44,16 @@ export async function maybePostComment(
   dryRun: boolean,
   decision: SentinelDecision,
   client: CommentClient | null,
-): Promise<'posted' | 'dry-run' | 'skipped'> {
+): Promise<'posted' | 'updated' | 'dry-run' | 'skipped'> {
   if (!enabled) return 'skipped';
+  const body = buildCommentMarkdown(decision);
   if (dryRun || !client) return 'dry-run';
-  await client.createComment(buildCommentMarkdown(decision));
+
+  const existing = (await client.listComments()).find(comment => comment.body.includes(COMMENT_MARKER));
+  if (existing) {
+    await client.updateComment(existing.id, body);
+    return 'updated';
+  }
+  await client.createComment(body);
   return 'posted';
 }

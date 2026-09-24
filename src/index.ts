@@ -46,6 +46,7 @@ async function main(): Promise<void> {
   const timeoutMs = Number(core.getInput('timeout_ms') || 45_000);
   const dryRun = optionalBoolean('dry_run', false);
   const comment = optionalBoolean('comment_on_github', config.comment_on_github ?? false);
+  const createCheckRun = optionalBoolean('create_check_run', config.create_check_run ?? true);
   const annotate = optionalBoolean('annotate', config.annotate ?? true);
   const token = core.getInput('github_token') || process.env.GITHUB_TOKEN || '';
 
@@ -224,6 +225,15 @@ async function main(): Promise<void> {
   const commentClient =
     octokit && pullNumber
       ? {
+          async listComments() {
+            const comments = await octokit.paginate(octokit.rest.issues.listComments, {
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              issue_number: Number(pullNumber),
+              per_page: 100,
+            });
+            return comments.map(comment => ({ id: comment.id, body: comment.body ?? '' }));
+          },
           async createComment(body: string) {
             await octokit.rest.issues.createComment({
               owner: github.context.repo.owner,
@@ -232,8 +242,46 @@ async function main(): Promise<void> {
               body,
             });
           },
+          async updateComment(id: number, body: string) {
+            await octokit.rest.issues.updateComment({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              comment_id: id,
+              body,
+            });
+          },
         }
       : null;
+
+  const headSha =
+    (github.context.payload.pull_request as { head?: { sha?: string } } | undefined)?.head?.sha ??
+    github.context.sha ??
+    null;
+
+  const checkRunClient = octokit
+    ? {
+        async createCheckRun(input: {
+          name: string;
+          headSha: string;
+          conclusion: 'success' | 'neutral' | 'failure';
+          title: string;
+          summary: string;
+        }) {
+          await octokit.rest.checks.create({
+            owner: github.context.repo.owner,
+            repo: github.context.repo.repo,
+            name: input.name,
+            head_sha: input.headSha,
+            status: 'completed',
+            conclusion: input.conclusion,
+            output: {
+              title: input.title,
+              summary: input.summary,
+            },
+          });
+        },
+      }
+    : null;
 
   const result = await runSentinel({
     rawFindings: loaded.findings,
@@ -244,6 +292,8 @@ async function main(): Promise<void> {
     baselineFingerprints,
     provider,
     commentClient,
+    checkRunClient,
+    headSha,
     options: {
       environment,
       component: core.getInput('component') || config.component || '',
@@ -259,6 +309,7 @@ async function main(): Promise<void> {
       timeout_ms: timeoutMs,
       dry_run: dryRun,
       comment_on_github: comment,
+      create_check_run: createCheckRun,
       annotate: annotate,
       max_findings: Number(core.getInput('max_findings') || config.max_findings || 2000),
       max_findings_to_jev: Number(core.getInput('max_findings_to_jev') || config.max_findings_to_jev || 40),
@@ -279,6 +330,7 @@ async function main(): Promise<void> {
   };
 
   writeDecisionOutputs(writer, result.decision, result.outcome.action_status, workspace);
+  core.setOutput('check_status', result.checkStatus);
   if (!dryRun) {
     for (const annotation of result.effects.annotations) {
       const payload = {
@@ -292,6 +344,7 @@ async function main(): Promise<void> {
     }
   }
   core.info(formatActionMessage(`Comment: ${result.commentStatus}`));
+  core.info(formatActionMessage(`Check run: ${result.checkStatus}`));
   core.info(formatActionMessage(`Effects: ${result.effects.effects.join(',')}`));
 }
 

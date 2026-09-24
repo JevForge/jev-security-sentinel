@@ -122,9 +122,10 @@ describe('decision contract', () => {
       actionStatus: outcome.action_status,
       annotate: true,
       comment: true,
+      checkRun: true,
     });
     expect(effects.effects.every(effect =>
-      ['set-outputs', 'fail-step', 'warn-step', 'request-review', 'no-op', 'pull-request-comment', 'file-annotation'].includes(effect),
+      ['set-outputs', 'fail-step', 'warn-step', 'request-review', 'no-op', 'pull-request-comment', 'file-annotation', 'check-run'].includes(effect),
     )).toBe(true);
     expect(JSON.stringify(effects)).not.toContain('rm -rf');
     expect(outcome.decision.explanation).toContain('rm -rf');

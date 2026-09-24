@@ -39,6 +39,7 @@ const FileConfigSchema = z
     exclude_paths: z.array(z.string()).optional(),
     policy_id: z.string().optional(),
     comment_on_github: z.boolean().optional(),
+    create_check_run: z.boolean().optional(),
     annotate: z.boolean().optional(),
     max_findings: z.number().int().positive().max(5000).optional(),
     max_findings_to_jev: z.number().int().positive().max(100).optional(),

@@ -274,6 +274,7 @@ export const RunOptionsSchema = z.object({
   timeout_ms: z.number().int().positive().max(120_000).default(45_000),
   dry_run: z.boolean().default(false),
   comment_on_github: z.boolean().default(false),
+  create_check_run: z.boolean().default(true),
   annotate: z.boolean().default(true),
   max_findings: z.number().int().positive().max(5000).default(2000),
   max_findings_to_jev: z.number().int().positive().max(100).default(40),
