@@ -53,6 +53,8 @@ async function main(): Promise<void> {
   const comment = optionalBoolean('comment_on_github', config.comment_on_github ?? false);
   const createCheckRun = optionalBoolean('create_check_run', config.create_check_run ?? true);
   const enrichEpssKev = optionalBoolean('enrich_epss_kev', false);
+  const writeSarif = optionalBoolean('write_sarif', false);
+  const writeReportArtifact = optionalBoolean('write_report_artifact', false);
   const annotate = optionalBoolean('annotate', config.annotate ?? true);
   const token = core.getInput('github_token') || process.env.GITHUB_TOKEN || '';
 
@@ -305,6 +307,7 @@ async function main(): Promise<void> {
     : null;
 
   const result = await runSentinel({
+    workspace,
     rawFindings: loaded.findings,
     sourceErrors: [...loaded.errors, ...remoteErrors],
     truncated: loaded.truncated,
@@ -333,6 +336,8 @@ async function main(): Promise<void> {
       comment_on_github: comment,
       create_check_run: createCheckRun,
       enrich_epss_kev: enrichEpssKev,
+      write_sarif: writeSarif,
+      write_report_artifact: writeReportArtifact,
       annotate: annotate,
       max_findings: Number(core.getInput('max_findings') || config.max_findings || 2000),
       max_findings_to_jev: Number(core.getInput('max_findings_to_jev') || config.max_findings_to_jev || 40),
@@ -354,6 +359,9 @@ async function main(): Promise<void> {
 
   writeDecisionOutputs(writer, result.decision, result.outcome.action_status, workspace);
   core.setOutput('check_status', result.checkStatus);
+  core.setOutput('sarif_file', result.artifactPaths.sarifPath ?? '');
+  core.setOutput('report_markdown_file', result.artifactPaths.markdownPath ?? '');
+  core.setOutput('report_json_file', result.artifactPaths.jsonPath ?? '');
   if (!dryRun) {
     for (const annotation of result.effects.annotations) {
       const payload = {

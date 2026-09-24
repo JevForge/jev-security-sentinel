@@ -4,6 +4,7 @@ import { prioritizeFindings, sampleForJev } from './decision/prioritize.js';
 import { planEffects, type PlannedEffects } from './executors/effects.js';
 import { maybePostComment, type CommentClient } from './executors/comment.js';
 import { maybeCreateCheckRun, type CheckRunClient } from './executors/check-run.js';
+import { writeArtifactReports } from './executors/artifacts.js';
 import type { EnrichmentMaps } from './collectors/enrichment.js';
 import type { JevProvider } from './jev/core/index.js';
 import type { RawFinding } from './collectors/common.js';
@@ -17,6 +18,7 @@ import {
 } from './schemas/sentinel.js';
 
 export interface RunSentinelParams {
+  workspace?: string;
   rawFindings: RawFinding[];
   sourceErrors: SourceError[];
   truncated: boolean;
@@ -37,6 +39,7 @@ export interface RunSentinelResult {
   effects: PlannedEffects;
   commentStatus: 'posted' | 'updated' | 'dry-run' | 'skipped';
   checkStatus: 'created' | 'dry-run' | 'skipped';
+  artifactPaths: { sarifPath: string | null; markdownPath: string | null; jsonPath: string | null };
   findings: Finding[];
 }
 
@@ -115,12 +118,26 @@ export async function runSentinel(params: RunSentinelParams): Promise<RunSentine
     params.checkRunClient ?? null,
   );
 
+  const artifactPaths =
+    !options.dry_run &&
+    params.workspace &&
+    (options.write_sarif || options.write_report_artifact)
+      ? writeArtifactReports({
+          workspace: params.workspace,
+          decision: outcome.decision,
+          writeSarif: options.write_sarif,
+          writeMarkdown: options.write_report_artifact,
+          writeJson: options.write_report_artifact,
+        })
+      : { sarifPath: null, markdownPath: null, jsonPath: null };
+
   return {
     decision: outcome.decision,
     outcome,
     effects,
     commentStatus,
     checkStatus,
+    artifactPaths,
     findings: outcome.decision.findings,
   };
 }

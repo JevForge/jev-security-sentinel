@@ -129,6 +129,14 @@ inputs:
     description: Enrich CVE findings with CISA KEV membership and FIRST EPSS scores (network call).
     required: false
     default: 'false'
+  write_sarif:
+    description: Write a SARIF 2.1.0 report to .jev/security-sentinel.sarif.
+    required: false
+    default: 'false'
+  write_report_artifact:
+    description: Write markdown and JSON decision reports under .jev/.
+    required: false
+    default: 'false'
   annotate:
     description: Emit workflow annotations for in-scope findings.
     required: false
@@ -177,6 +185,12 @@ outputs:
     description: One-line decision summary.
   check_status:
     description: created | dry-run | skipped for the Checks API run.
+  sarif_file:
+    description: Workspace path to written SARIF when write_sarif is true.
+  report_markdown_file:
+    description: Workspace path to markdown report when write_report_artifact is true.
+  report_json_file:
+    description: Workspace path to JSON report when write_report_artifact is true.
 
 runs:
   using: node24
