@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-24
+
+### Changed
+
+* Jev sample now prefers at least one finding per category before filling remaining slots by priority.
+
+
 ## [0.11.0] - 2026-09-24
 
 ### Added
@@ -88,6 +95,7 @@
 * Initial JEV Security Sentinel gate for normalized findings, SARIF, Semgrep, Trivy, Snyk, Veracode, and GitHub Advanced Security.
 * Configurable Jev providers: `vercel-ai-gateway`, `typesafe-native`, and `custom-compatible`.
 * Deterministic floor that can only make PASS, WARN, BLOCK, or REVIEW stricter, while preserving every finding.
+
 
 
 
