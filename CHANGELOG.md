@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-24
+
+### Added
+
+* Optional `enrich_epss_kev` to load CISA KEV membership and FIRST EPSS scores for CVE findings.
+* Findings gain `kev` / `epss` fields; KEV matches escalate exploitability to `known_exploited`.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added
