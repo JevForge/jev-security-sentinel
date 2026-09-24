@@ -36350,6 +36350,7 @@ var RunOptionsSchema = external_exports.object({
   enrich_epss_kev: external_exports.boolean().default(false),
   write_sarif: external_exports.boolean().default(false),
   write_report_artifact: external_exports.boolean().default(false),
+  request_reviewers: external_exports.string().optional(),
   annotate: external_exports.boolean().default(true),
   max_findings: external_exports.number().int().positive().max(5e3).default(2e3),
   max_findings_to_jev: external_exports.number().int().positive().max(100).default(40),
@@ -53037,6 +53038,26 @@ function writeArtifactReports(input) {
   return { sarifPath, markdownPath, jsonPath };
 }
 
+// src/executors/reviewers.ts
+function parseReviewerList(raw) {
+  const reviewers = [];
+  const teamReviewers = [];
+  if (!raw?.trim()) return { reviewers, teamReviewers };
+  for (const part of raw.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean)) {
+    if (part.startsWith("team:")) teamReviewers.push(part.slice("team:".length).trim());
+    else reviewers.push(part.replace(/^@/, ""));
+  }
+  return { reviewers, teamReviewers };
+}
+async function maybeRequestReviewers(enabled, dryRun, rawList, client) {
+  if (!enabled) return "skipped";
+  const { reviewers, teamReviewers } = parseReviewerList(rawList);
+  if (reviewers.length === 0 && teamReviewers.length === 0) return "skipped";
+  if (dryRun || !client) return "dry-run";
+  await client.requestReviewers({ reviewers, teamReviewers });
+  return "requested";
+}
+
 // src/run.ts
 async function runSentinel(params) {
   const options = RunOptionsSchema.parse(params.options);
@@ -53114,12 +53135,19 @@ async function runSentinel(params) {
     writeMarkdown: options.write_report_artifact,
     writeJson: options.write_report_artifact
   }) : { sarifPath: null, markdownPath: null, jsonPath: null };
+  const reviewerStatus = await maybeRequestReviewers(
+    Boolean(options.request_reviewers?.trim()) && (outcome.decision.decision === "BLOCK" || outcome.decision.decision === "REVIEW" || outcome.action_status === "request-review"),
+    options.dry_run,
+    options.request_reviewers,
+    params.reviewerClient ?? null
+  );
   return {
     decision: outcome.decision,
     outcome,
     effects,
     commentStatus,
     checkStatus,
+    reviewerStatus,
     artifactPaths,
     findings: outcome.decision.findings
   };
@@ -53452,6 +53480,18 @@ async function main() {
       });
     }
   } : null;
+  const pullRequestNumber = github.context.payload.pull_request?.number;
+  const reviewerClient = octokit && pullRequestNumber ? {
+    async requestReviewers(input) {
+      await octokit.rest.pulls.requestReviewers({
+        owner: github.context.repo.owner,
+        repo: github.context.repo.repo,
+        pull_number: Number(pullRequestNumber),
+        reviewers: input.reviewers,
+        team_reviewers: input.teamReviewers
+      });
+    }
+  } : null;
   const result = await runSentinel({
     workspace,
     rawFindings: loaded.findings,
@@ -53464,6 +53504,7 @@ async function main() {
     provider,
     commentClient,
     checkRunClient,
+    reviewerClient,
     headSha,
     options: {
       environment,
@@ -53484,6 +53525,7 @@ async function main() {
       enrich_epss_kev: enrichEpssKev,
       write_sarif: writeSarif,
       write_report_artifact: writeReportArtifact,
+      request_reviewers: core.getInput("request_reviewers") || void 0,
       annotate,
       max_findings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
       max_findings_to_jev: Number(core.getInput("max_findings_to_jev") || config2.max_findings_to_jev || 40),
@@ -53517,6 +53559,7 @@ async function main() {
   }
   core.info(formatActionMessage(`Comment: ${result.commentStatus}`));
   core.info(formatActionMessage(`Check run: ${result.checkStatus}`));
+  core.info(formatActionMessage(`Reviewers: ${result.reviewerStatus}`));
   core.info(formatActionMessage(`Effects: ${result.effects.effects.join(",")}`));
 }
 main().catch((error2) => {
