@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JevForge/jev-security-sentinel@v0
+      - uses: JevForge/jev-security-sentinel@main
         with:
           semgrep_path: reports/semgrep.json
           snyk_path: reports/snyk.json
