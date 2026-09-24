@@ -185,6 +185,9 @@ async function main(): Promise<void> {
     trivyPath: core.getInput('trivy_path') || undefined,
     snykPath: core.getInput('snyk_path') || undefined,
     veracodePath: core.getInput('veracode_path') || undefined,
+    osvPath: core.getInput('osv_path') || undefined,
+    grypePath: core.getInput('grype_path') || undefined,
+    checkovPath: core.getInput('checkov_path') || undefined,
     maxFindings: Number(core.getInput('max_findings') || config.max_findings || 2000),
     remote,
   });

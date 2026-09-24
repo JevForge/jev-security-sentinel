@@ -400,3 +400,120 @@ export function parseDependabot(data: unknown): RawFinding[] {
     });
   });
 }
+
+/** OSV scanner JSON (`results[].packages[].vulnerabilities[]` or top-level `vulns[]`). */
+export function parseOsv(data: unknown): RawFinding[] {
+  const doc = asRecord(data);
+  if (!doc) throw new SourceParseError('OSV document must be an object');
+  const findings: RawFinding[] = [];
+  const results = asArray(doc.results);
+  if (results.length > 0) {
+    for (const result of results) {
+      const resultRecord = asRecord(result) ?? {};
+      const source = asRecord(resultRecord.source);
+      const path = text(source?.path) || null;
+      for (const pkg of asArray(resultRecord.packages)) {
+        const pkgRecord = asRecord(pkg) ?? {};
+        const packageInfo = asRecord(pkgRecord.package);
+        for (const vuln of asArray(pkgRecord.vulnerabilities)) {
+          const vulnRecord = asRecord(vuln) ?? {};
+          const aliases = asArray(vulnRecord.aliases).map(alias => text(alias));
+          const cve = aliases.find(alias => alias.startsWith('CVE-')) || null;
+          const severityEntries = asArray(vulnRecord.severity);
+          const firstSeverity = asRecord(severityEntries[0]);
+          findings.push(
+            makeRaw({
+              source: 'osv',
+              category: 'sca',
+              severity: firstSeverity?.score
+                ? severityFromScore(Number(firstSeverity.score))
+                : normalizeSeverity(firstSeverity?.type),
+              title: text(vulnRecord.summary) || text(vulnRecord.id) || 'OSV vulnerability',
+              ruleId: text(vulnRecord.id) || 'osv',
+              path,
+              cve,
+              component: text(packageInfo?.name),
+              message: text(vulnRecord.details || vulnRecord.summary, 500),
+              hints: aliases,
+            }),
+          );
+        }
+      }
+    }
+    return findings;
+  }
+  const vulns = asArray(doc.vulns);
+  if (vulns.length === 0) throw new SourceParseError('OSV document is missing results[] or vulns[]');
+  return vulns.map(item => {
+    const record = asRecord(item) ?? {};
+    const aliases = asArray(record.aliases).map(alias => text(alias));
+    return makeRaw({
+      source: 'osv',
+      category: 'sca',
+      severity: normalizeSeverity(record.severity),
+      title: text(record.summary) || text(record.id) || 'OSV vulnerability',
+      ruleId: text(record.id) || 'osv',
+      cve: aliases.find(alias => alias.startsWith('CVE-')) || null,
+      message: text(record.details || record.summary, 500),
+      hints: aliases,
+    });
+  });
+}
+
+/** Grype JSON (`matches[]`). */
+export function parseGrype(data: unknown): RawFinding[] {
+  const doc = asRecord(data);
+  if (!doc || !Array.isArray(doc.matches)) {
+    throw new SourceParseError('Grype document is missing matches[]');
+  }
+  return doc.matches.map(item => {
+    const record = asRecord(item) ?? {};
+    const vulnerability = asRecord(record.vulnerability) ?? {};
+    const artifact = asRecord(record.artifact) ?? {};
+    const related = asArray(vulnerability.relatedVulnerabilities);
+    const relatedCve = related
+      .map(entry => text(asRecord(entry)?.id))
+      .find(id => id.startsWith('CVE-'));
+    return makeRaw({
+      source: 'grype',
+      category: 'sca',
+      severity: normalizeSeverity(vulnerability.severity),
+      title: text(vulnerability.description) || text(vulnerability.id) || 'Grype match',
+      ruleId: text(vulnerability.id) || 'grype',
+      path: text(artifact.name) ? `pkg:${text(artifact.name)}` : null,
+      cve: text(vulnerability.id).startsWith('CVE-') ? text(vulnerability.id) : relatedCve || null,
+      component: text(artifact.name),
+      message: text(vulnerability.description, 500),
+      hints: [text(vulnerability.id)],
+    });
+  });
+}
+
+/** Checkov JSON (`results.failed_checks[]` or top-level `failed_checks[]`). */
+export function parseCheckov(data: unknown): RawFinding[] {
+  const doc = asRecord(data);
+  if (!doc) throw new SourceParseError('Checkov document must be an object');
+  const results = asRecord(doc.results);
+  const rows = Array.isArray(results?.failed_checks)
+    ? results.failed_checks
+    : Array.isArray(doc.failed_checks)
+      ? doc.failed_checks
+      : null;
+  if (!rows) throw new SourceParseError('Checkov document is missing failed_checks[]');
+  return rows.map(item => {
+    const record = asRecord(item) ?? {};
+    const fileLineRange = asArray(record.file_line_range);
+    const startLine = fileLineRange[0];
+    return makeRaw({
+      source: 'checkov',
+      category: 'iac',
+      severity: normalizeSeverity(record.severity),
+      title: text(record.check_name) || text(record.check_id) || 'Checkov finding',
+      ruleId: text(record.check_id) || 'checkov',
+      path: record.file_path ?? record.repo_file_path,
+      startLine,
+      message: text(record.check_name || record.description, 500),
+      hints: [text(record.check_type), text(record.guideline)],
+    });
+  });
+}

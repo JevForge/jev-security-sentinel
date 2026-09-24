@@ -10,6 +10,9 @@ import {
   parseSnyk,
   parseTrivy,
   parseVeracode,
+  parseOsv,
+  parseGrype,
+  parseCheckov,
 } from './parsers.js';
 import { resolveReportPathInput } from '../utils/report-paths.js';
 import { resolveInsideWorkspace } from '../utils/workspace-path.js';
@@ -27,6 +30,9 @@ export interface LoadRequest {
   trivyPath?: string;
   snykPath?: string;
   veracodePath?: string;
+  osvPath?: string;
+  grypePath?: string;
+  checkovPath?: string;
   maxFindings: number;
   remote?: {
     semgrep?: unknown;
@@ -134,6 +140,9 @@ export function loadFindings(request: LoadRequest): LoadResult {
   loadPathGroup(request.workspace, request.trivyPath, 'trivy', parseTrivy, bucket, errors, loadedPaths);
   loadPathGroup(request.workspace, request.snykPath, 'snyk', parseSnyk, bucket, errors, loadedPaths);
   loadPathGroup(request.workspace, request.veracodePath, 'veracode', parseVeracode, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.osvPath, 'osv', parseOsv, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.grypePath, 'grype', parseGrype, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.checkovPath, 'checkov', parseCheckov, bucket, errors, loadedPaths);
 
   const remote = request.remote;
   if (remote?.semgrep !== undefined) take('semgrep', parseSemgrep, remote.semgrep, bucket, errors);

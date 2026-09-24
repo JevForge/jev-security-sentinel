@@ -36028,6 +36028,9 @@ var FINDING_SOURCES = [
   "trivy",
   "snyk",
   "veracode",
+  "osv",
+  "grype",
+  "checkov",
   "github-code-scanning",
   "github-secret-scanning",
   "github-dependabot"
@@ -36995,6 +36998,109 @@ function parseDependabot(data) {
     });
   });
 }
+function parseOsv(data) {
+  const doc = asRecord(data);
+  if (!doc) throw new SourceParseError("OSV document must be an object");
+  const findings = [];
+  const results = asArray(doc.results);
+  if (results.length > 0) {
+    for (const result of results) {
+      const resultRecord = asRecord(result) ?? {};
+      const source = asRecord(resultRecord.source);
+      const path = text(source?.path) || null;
+      for (const pkg of asArray(resultRecord.packages)) {
+        const pkgRecord = asRecord(pkg) ?? {};
+        const packageInfo = asRecord(pkgRecord.package);
+        for (const vuln of asArray(pkgRecord.vulnerabilities)) {
+          const vulnRecord = asRecord(vuln) ?? {};
+          const aliases = asArray(vulnRecord.aliases).map((alias) => text(alias));
+          const cve = aliases.find((alias) => alias.startsWith("CVE-")) || null;
+          const severityEntries = asArray(vulnRecord.severity);
+          const firstSeverity = asRecord(severityEntries[0]);
+          findings.push(
+            makeRaw({
+              source: "osv",
+              category: "sca",
+              severity: firstSeverity?.score ? severityFromScore(Number(firstSeverity.score)) : normalizeSeverity(firstSeverity?.type),
+              title: text(vulnRecord.summary) || text(vulnRecord.id) || "OSV vulnerability",
+              ruleId: text(vulnRecord.id) || "osv",
+              path,
+              cve,
+              component: text(packageInfo?.name),
+              message: text(vulnRecord.details || vulnRecord.summary, 500),
+              hints: aliases
+            })
+          );
+        }
+      }
+    }
+    return findings;
+  }
+  const vulns = asArray(doc.vulns);
+  if (vulns.length === 0) throw new SourceParseError("OSV document is missing results[] or vulns[]");
+  return vulns.map((item) => {
+    const record2 = asRecord(item) ?? {};
+    const aliases = asArray(record2.aliases).map((alias) => text(alias));
+    return makeRaw({
+      source: "osv",
+      category: "sca",
+      severity: normalizeSeverity(record2.severity),
+      title: text(record2.summary) || text(record2.id) || "OSV vulnerability",
+      ruleId: text(record2.id) || "osv",
+      cve: aliases.find((alias) => alias.startsWith("CVE-")) || null,
+      message: text(record2.details || record2.summary, 500),
+      hints: aliases
+    });
+  });
+}
+function parseGrype(data) {
+  const doc = asRecord(data);
+  if (!doc || !Array.isArray(doc.matches)) {
+    throw new SourceParseError("Grype document is missing matches[]");
+  }
+  return doc.matches.map((item) => {
+    const record2 = asRecord(item) ?? {};
+    const vulnerability = asRecord(record2.vulnerability) ?? {};
+    const artifact = asRecord(record2.artifact) ?? {};
+    const related = asArray(vulnerability.relatedVulnerabilities);
+    const relatedCve = related.map((entry) => text(asRecord(entry)?.id)).find((id) => id.startsWith("CVE-"));
+    return makeRaw({
+      source: "grype",
+      category: "sca",
+      severity: normalizeSeverity(vulnerability.severity),
+      title: text(vulnerability.description) || text(vulnerability.id) || "Grype match",
+      ruleId: text(vulnerability.id) || "grype",
+      path: text(artifact.name) ? `pkg:${text(artifact.name)}` : null,
+      cve: text(vulnerability.id).startsWith("CVE-") ? text(vulnerability.id) : relatedCve || null,
+      component: text(artifact.name),
+      message: text(vulnerability.description, 500),
+      hints: [text(vulnerability.id)]
+    });
+  });
+}
+function parseCheckov(data) {
+  const doc = asRecord(data);
+  if (!doc) throw new SourceParseError("Checkov document must be an object");
+  const results = asRecord(doc.results);
+  const rows = Array.isArray(results?.failed_checks) ? results.failed_checks : Array.isArray(doc.failed_checks) ? doc.failed_checks : null;
+  if (!rows) throw new SourceParseError("Checkov document is missing failed_checks[]");
+  return rows.map((item) => {
+    const record2 = asRecord(item) ?? {};
+    const fileLineRange = asArray(record2.file_line_range);
+    const startLine = fileLineRange[0];
+    return makeRaw({
+      source: "checkov",
+      category: "iac",
+      severity: normalizeSeverity(record2.severity),
+      title: text(record2.check_name) || text(record2.check_id) || "Checkov finding",
+      ruleId: text(record2.check_id) || "checkov",
+      path: record2.file_path ?? record2.repo_file_path,
+      startLine,
+      message: text(record2.check_name || record2.description, 500),
+      hints: [text(record2.check_type), text(record2.guideline)]
+    });
+  });
+}
 
 // src/utils/report-paths.ts
 var import_node_fs2 = require("node:fs");
@@ -37169,6 +37275,9 @@ function loadFindings(request) {
   loadPathGroup(request.workspace, request.trivyPath, "trivy", parseTrivy, bucket, errors, loadedPaths);
   loadPathGroup(request.workspace, request.snykPath, "snyk", parseSnyk, bucket, errors, loadedPaths);
   loadPathGroup(request.workspace, request.veracodePath, "veracode", parseVeracode, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.osvPath, "osv", parseOsv, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.grypePath, "grype", parseGrype, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.checkovPath, "checkov", parseCheckov, bucket, errors, loadedPaths);
   const remote = request.remote;
   if (remote?.semgrep !== void 0) take("semgrep", parseSemgrep, remote.semgrep, bucket, errors);
   if (remote?.snyk !== void 0) take("snyk", parseSnyk, remote.snyk, bucket, errors);
@@ -53383,6 +53492,9 @@ async function main() {
     trivyPath: core.getInput("trivy_path") || void 0,
     snykPath: core.getInput("snyk_path") || void 0,
     veracodePath: core.getInput("veracode_path") || void 0,
+    osvPath: core.getInput("osv_path") || void 0,
+    grypePath: core.getInput("grype_path") || void 0,
+    checkovPath: core.getInput("checkov_path") || void 0,
     maxFindings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
     remote
   });
