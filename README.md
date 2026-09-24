@@ -324,7 +324,16 @@ Secret findings send the rule id only. Messages are redacted. Findings beyond th
 
 Optional `.jev/config.yml` supplies provider and policy defaults. Workflow inputs win when set. See [`examples/.jev/config.yml`](examples/.jev/config.yml).
 
-Allowlist (`rule_ids`, `cves`, `fingerprints`, `paths`, `ids`) sets `gate_effect: allowlisted`. `exclude_paths` sets `out_of_scope`. Both remain in `findings`.
+Allowlist `entries` require `owner`, `reason`, and `expires_at` (YYYY-MM-DD). Expired entries do not suppress the gate (`ALLOWLIST_EXPIRED`). Legacy arrays (`rule_ids`, `cves`, `fingerprints`, `paths`, `ids`) still work and emit `ALLOWLIST_UNAUDITED`. `exclude_paths` sets `out_of_scope`. Both remain in `findings`.
+
+```yaml
+allowlist:
+  entries:
+    - rule_id: javascript.eval
+      owner: secops@example.com
+      reason: Accepted until framework upgrade lands
+      expires_at: "2026-12-31"
+```
 
 ## Troubleshooting
 
