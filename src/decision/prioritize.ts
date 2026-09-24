@@ -50,18 +50,32 @@ export interface JevFindingSample {
 }
 
 export function sampleForJev(findings: Finding[], limit: number): JevFindingSample[] {
-  return prioritizeFindings(findings)
-    .slice(0, limit)
-    .map(finding => ({
-      id: finding.id,
-      category: finding.category,
-      severity: finding.severity,
-      exploitability: finding.exploitability,
-      rule_id: finding.rule_id,
-      path: finding.path,
-      cve: finding.cve,
-      in_change: finding.in_change,
-      gate_effect: finding.gate_effect,
-      title: finding.category === 'secrets' ? finding.rule_id : finding.title,
-    }));
+  const ordered = prioritizeFindings(findings);
+  const selected: Finding[] = [];
+  const seenCategories = new Set<string>();
+  // First pass: one finding per category for coverage.
+  for (const finding of ordered) {
+    if (selected.length >= limit) break;
+    if (seenCategories.has(finding.category)) continue;
+    seenCategories.add(finding.category);
+    selected.push(finding);
+  }
+  // Second pass: fill remaining slots by priority.
+  for (const finding of ordered) {
+    if (selected.length >= limit) break;
+    if (selected.includes(finding)) continue;
+    selected.push(finding);
+  }
+  return selected.map(finding => ({
+    id: finding.id,
+    category: finding.category,
+    severity: finding.severity,
+    exploitability: finding.exploitability,
+    rule_id: finding.rule_id,
+    path: finding.path,
+    cve: finding.cve,
+    in_change: finding.in_change,
+    gate_effect: finding.gate_effect,
+    title: finding.category === 'secrets' ? finding.rule_id : finding.title,
+  }));
 }

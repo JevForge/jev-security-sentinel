@@ -52785,7 +52785,21 @@ function prioritizeFindings(findings) {
   });
 }
 function sampleForJev(findings, limit) {
-  return prioritizeFindings(findings).slice(0, limit).map((finding) => ({
+  const ordered = prioritizeFindings(findings);
+  const selected = [];
+  const seenCategories = /* @__PURE__ */ new Set();
+  for (const finding of ordered) {
+    if (selected.length >= limit) break;
+    if (seenCategories.has(finding.category)) continue;
+    seenCategories.add(finding.category);
+    selected.push(finding);
+  }
+  for (const finding of ordered) {
+    if (selected.length >= limit) break;
+    if (selected.includes(finding)) continue;
+    selected.push(finding);
+  }
+  return selected.map((finding) => ({
     id: finding.id,
     category: finding.category,
     severity: finding.severity,
