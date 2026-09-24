@@ -1,144 +1,274 @@
 # JEV Security Sentinel
 
-JEV Security Sentinel is a GitHub Action that turns SAST, SCA, IaC, secrets, and container findings into a gate decision: `PASS`, `WARN`, `BLOCK`, or `REVIEW`.
+[![GitHub Release](https://img.shields.io/github/v/release/JevForge/jev-security-sentinel)](https://github.com/JevForge/jev-security-sentinel/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/JevForge/jev-security-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/JevForge/jev-security-sentinel/actions/workflows/ci.yml)
 
-Jev proposes the decision. A deterministic policy then keeps every finding visible and can only make the result stricter. Allowlists change the gate effect of a finding. They do not delete it.
+**Turn SAST, SCA, IaC, secrets, and container findings into a CI gate** using [TypeSafe Jev](https://vercel.com/ai-gateway/models/jev) as a typed decision layer.
+
+Scanner tools produce long lists. Teams need a clear merge gate without burying findings. This Action normalizes reports, asks Jev for `PASS` / `WARN` / `BLOCK` / `REVIEW`, then applies a deterministic policy that **keeps every finding visible** and can only make the decision stricter.
+
+```yaml
+- id: sentinel
+  uses: JevForge/jev-security-sentinel@v0.1.0
+  env:
+    AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+  with:
+    sarif_path: reports/results.sarif
+    environment: production
+    gate_scope: changed
+```
+
+Pin `@v0.1.0`, the floating major `@v0`, or a commit SHA.
+
+## Features
+
+* Contextual gate for SAST, SCA, IaC, secrets, containers, and license findings
+* Typed Jev evaluation (`experimental_evaluate`) — not free-form text generation
+* Deterministic policy floor: Jev may escalate, never hide or weaken the floor
+* Every finding stays in outputs (allowlist changes gate effect only)
+* Native parsers for SARIF, Semgrep, Trivy, Snyk, Veracode, plus optional GitHub Advanced Security / remote APIs
+* Structured outputs for later steps (`decision`, `risk_summary`, `findings`, …)
+* Secret-based auth; credentials never go through Action inputs
+* Configurable failure modes: `fail` | `warn` | `request-review` | `no-op`
 
 ## How it works
 
-```mermaid
-flowchart TD
-  event[Workflow inputs and optional scanner APIs] --> collect[Normalize SARIF Semgrep Trivy Snyk Veracode GHAS]
-  collect --> redact[Redact secrets and mark allowlists]
-  redact --> floor[Compute the policy floor]
-  floor --> jev[Jev typed evaluation]
-  jev --> schema[Strict schema check]
-  schema --> merge[Keep the stricter of floor and Jev]
-  merge --> effects[Outputs comment and annotations]
+```text
+Scanner reports / optional APIs
+        ↓
+Normalize + redact secrets
+        ↓
+Compute deterministic policy floor
+        ↓
+Jev proposes PASS | WARN | BLOCK | REVIEW
+        ↓
+Schema check + merge (stricter of floor and Jev)
+        ↓
+Action outputs (+ optional comment / annotations)
+        ↓
+Next CI/CD step
 ```
 
-Jev is called through one provider, selected by `jev_provider` or `.jev/config.yml`:
+```mermaid
+flowchart LR
+  A[Findings] --> B[Normalize]
+  B --> C[Policy floor]
+  C --> D[Jev]
+  D --> E[Validate]
+  E --> F[Merge]
+  F --> G[Outputs]
+```
 
-| Provider | Credential | Model |
-| --- | --- | --- |
-| `vercel-ai-gateway` (default) | `AI_GATEWAY_API_KEY` | `typesafe-ai/jev` via `experimental_evaluate` |
-| `typesafe-native` | `TYPESAFE_API_KEY` | `jev_model` from the native catalog |
-| `custom-compatible` | `JEV_CUSTOM_API_KEY` | `jev_model` at an HTTPS `jev_endpoint` |
+1. Load findings from JSON/SARIF paths and optional remote fetches.
+2. Annotate allowlists, change scope, severity, and exploitability.
+3. Compute a deterministic floor from the configured policy.
+4. Call Jev through `jev_provider` (no silent provider fallback).
+5. Reject invalid Jev payloads; merge so the final decision is never weaker than the floor.
+6. Emit outputs. Explanation text is display-only and never executed.
 
-The gateway adapter is isolated behind `JevProvider` and does not use `generateText`. Providers do not fall back to each other. If Jev is unavailable or the payload fails the schema, the result is provisional and the configured low-confidence policy applies. The Action does not invent a confident AI decision.
+## Demo
 
-## Quick start
+```text
+Pull Request with Semgrep + Trivy reports
+        ↓
+Critical SQL injection on a changed path
+        ↓
+Policy floor = BLOCK
+Jev proposed = PASS (ignored as weaker)
+        ↓
+decision = BLOCK
+findings still include the SQL injection
+        ↓
+Job fails — deploy step does not run
+```
+
+## Why Jev?
+
+Jev is the **contextual judgment** layer. Severity thresholds alone cannot weigh exploitability, production exposure, and change scope together. This Action sends a redacted sample and counts to Jev, receives a typed choice (`PASS` / `WARN` / `BLOCK` / `REVIEW`), then lets local policy enforce a floor.
+
+Jev does **not** delete findings, invent shell commands, or replace scanners. If Jev is unavailable or below `min_confidence`, the result is marked `provisional` and `low_confidence_policy` applies — the Action never pretends a confident AI decision happened.
+
+## Quick Start
+
+1. Produce at least one scanner report in the workspace (for example SARIF).
+2. Add repository secret `AI_GATEWAY_API_KEY` (default Jev provider).
+3. Add a workflow:
 
 ```yaml
 name: Security gate
 on:
   pull_request:
+
 permissions:
   contents: read
   pull-requests: read
+
 jobs:
   sentinel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JevForge/jev-security-sentinel@v0.1.0
+
+      - id: sentinel
+        uses: JevForge/jev-security-sentinel@v0.1.0
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
         with:
           sarif_path: reports/results.sarif
           environment: production
           gate_scope: changed
-        env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+
+      - name: Print decision
+        if: always()
+        run: |
+          echo "decision=${{ steps.sentinel.outputs.decision }}"
+          echo "floor=${{ steps.sentinel.outputs.policy_floor }}"
+          echo "blocking=${{ steps.sentinel.outputs.blocking_count }}"
 ```
 
-Pin `@v0.1.0`, the floating major `@v0`, or a commit SHA.
+## Complete Example
+
+Use the gate decision to stop a later job:
+
+```yaml
+name: Security gate and deploy
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.sentinel.outputs.decision }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sentinel
+        uses: JevForge/jev-security-sentinel@v0.1.0
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        with:
+          sarif_path: reports/semgrep.sarif
+          trivy_path: reports/trivy.json
+          environment: production
+          gate_scope: changed
+          comment_on_github: 'true'
+          review_mode: fail
+
+  deploy-preview:
+    needs: gate
+    if: needs.gate.outputs.decision == 'PASS' || needs.gate.outputs.decision == 'WARN'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Safe to continue preview deploy"
+```
+
+More workflows: [`examples/gate.yml`](examples/gate.yml), [`examples/pr-gate.yml`](examples/pr-gate.yml), [`examples/multi-scanner.yml`](examples/multi-scanner.yml).
 
 ## Inputs
 
-Required data is at least one finding source, or an explicit remote fetch. If nothing is configured, the gate still runs and reports `NO_FINDINGS`.
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `findings` | no | — | Inline normalized findings JSON |
+| `findings_path` | no | — | Workspace path to normalized findings JSON |
+| `sarif_path` | no | — | SARIF 2.1.0 report path |
+| `semgrep_path` | no | — | Semgrep JSON path |
+| `trivy_path` | no | — | Trivy JSON path |
+| `snyk_path` | no | — | Snyk CLI or REST JSON path |
+| `veracode_path` | no | — | Veracode findings JSON path |
+| `fetch_ghas` | no | `false` | Fetch open code scanning, secret scanning, and Dependabot alerts |
+| `fetch_snyk` | no | `false` | Fetch Snyk REST issues (`SNYK_TOKEN` + `snyk_org_id`) |
+| `snyk_org_id` | no | — | Snyk organization id |
+| `snyk_api_base` | no | — | Optional Snyk API origin (for example `https://api.eu.snyk.io`) |
+| `fetch_veracode` | no | `false` | Fetch Veracode findings |
+| `veracode_app_guid` | no | — | Veracode application GUID |
+| `fetch_semgrep` | no | `false` | Fetch Semgrep App findings |
+| `semgrep_deployment_id` | no | — | Semgrep deployment id or slug |
+| `environment` | no | `production` | `production` \| `staging` \| `development` \| `test` \| `unknown` |
+| `component` | no | — | Component name sent in Jev context |
+| `gate_scope` | no | `changed` on PR, else `all` | `all` \| `changed` |
+| `changed_paths` | no | PR files via API | JSON array of paths |
+| `min_confidence` | no | `0.75` | Minimum Jev confidence to trust the proposal |
+| `low_confidence_policy` | no | `fail` | `fail` \| `warn` \| `request-review` \| `no-op` |
+| `source_error_policy` | no | `fail` | `fail` \| `warn` when a source cannot be read |
+| `review_mode` | no | `fail` | `fail` \| `continue` for `REVIEW` (`BLOCK` always fails) |
+| `jev_provider` | no | `vercel-ai-gateway` | `vercel-ai-gateway` \| `typesafe-native` \| `custom-compatible` |
+| `jev_endpoint` | no | — | HTTPS evaluate endpoint (`custom-compatible`) |
+| `jev_model` | no | — | Catalog model id (native / custom). Gateway default: `typesafe-ai/jev` |
+| `timeout_ms` | no | `45000` | Remote call timeout |
+| `max_findings` | no | `2000` | Max preserved findings (overflow → at least `REVIEW`) |
+| `max_findings_to_jev` | no | `40` | Sample size sent to Jev (policy still sees all) |
+| `comment_on_github` | no | `false` | Post a PR/issue summary comment |
+| `annotate` | no | `true` | Emit workflow annotations for in-scope findings |
+| `dry_run` | no | `false` | Skip comments and annotations |
+| `github_token` | no | `${{ github.token }}` | Token for PR files, comments, optional GHAS |
 
-| Input | Default | Role |
-| --- | --- | --- |
-| `findings`, `findings_path` | empty | Normalized JSON |
-| `sarif_path` | empty | SARIF 2.1.0 |
-| `semgrep_path` | empty | Semgrep CLI or API JSON |
-| `trivy_path` | empty | Trivy JSON |
-| `snyk_path` | empty | Snyk CLI or REST JSON |
-| `veracode_path` | empty | Veracode findings JSON |
-| `fetch_ghas` | `false` | Open code scanning, secret scanning, and Dependabot alerts |
-| `fetch_snyk` | `false` | Snyk REST issues. Needs `SNYK_TOKEN` and `snyk_org_id` |
-| `fetch_veracode` | `false` | Veracode findings API. Needs `VERACODE_API_ID`, `VERACODE_API_KEY`, `veracode_app_guid` |
-| `fetch_semgrep` | `false` | Semgrep App findings. Needs `SEMGREP_APP_TOKEN` and `semgrep_deployment_id` |
-| `environment` | `production` | Policy profile |
-| `gate_scope` | `changed` on pull requests, otherwise `all` | Which findings raise the floor |
-| `changed_paths` | pull request files | JSON array of paths |
-| `min_confidence` | `0.75` | Confidence required to trust Jev |
-| `low_confidence_policy` | `fail` | `fail`, `warn`, `request-review`, or `no-op` |
-| `source_error_policy` | `fail` | Missing report or API failure |
-| `review_mode` | `fail` | `REVIEW` fails the job unless set to `continue` |
-| `jev_provider` | `vercel-ai-gateway` | Jev access provider |
-| `dry_run` | `false` | Skip comments and annotations |
-| `comment_on_github` | `false` | Pull request or issue comment |
-| `annotate` | `true` | Workflow annotations for in-scope findings |
-
-`BLOCK` always fails the job. `WARN` leaves the job green and emits a warning. Scanner credentials belong in `env`, not in inputs.
-
-Paths must stay inside `GITHUB_WORKSPACE`. Reports larger than 20MB are rejected and recorded as source errors.
+Paths must stay inside `GITHUB_WORKSPACE`. Reports larger than 20MB are rejected as source errors. Scanner credentials belong in `env`, not in `with:`.
 
 ## Outputs
 
-| Output | Meaning |
+| Output | Description |
 | --- | --- |
-| `decision` | Final `PASS`, `WARN`, `BLOCK`, or `REVIEW` |
-| `confidence` | 0 to 1, or 0 when Jev did not evaluate |
-| `reason_codes` | JSON array |
-| `findings` | Every preserved finding |
-| `findings_file` | Workspace file when `findings` is too large for an output |
-| `risk_summary` | Counts, including allowlisted and out-of-scope findings |
-| `provisional` | `true` when the result is not a confident Jev decision |
-| `jev_status` | `evaluated`, `unavailable`, or `schema_rejected` |
-| `jev_proposed` | Jev choice, empty when Jev did not evaluate |
-| `policy_floor` | Deterministic minimum |
-| `blocking_count` | Findings with gate effect `blocking` |
+| `decision` | Final `PASS` \| `WARN` \| `BLOCK` \| `REVIEW` |
+| `confidence` | `0`–`1` (or `0` when Jev did not evaluate) |
+| `reason_codes` | JSON array of stable reason codes |
+| `findings` | JSON array of every preserved finding (empty when spilled) |
+| `findings_file` | Workspace file path when findings were spilled |
+| `findings_count` | Number of preserved findings |
+| `findings_spilled` | `true` when findings were written to `findings_file` |
+| `risk_summary` | JSON counts (includes allowlisted / out-of-scope) |
+| `provisional` | `true` when the result is not a confident Jev evaluation |
+| `jev_status` | `evaluated` \| `unavailable` \| `schema_rejected` |
+| `jev_proposed` | Jev choice, or empty when Jev did not evaluate |
+| `policy_floor` | Deterministic minimum decision |
+| `policy_id` | Policy identifier |
+| `blocking_count` | Findings with `gate_effect: blocking` |
+| `summary` | One-line decision summary |
 
-## Decision model
+### Using outputs in conditions
 
-Default production floor:
+```yaml
+- name: Continue only when the gate is clear
+  if: steps.sentinel.outputs.decision == 'PASS'
 
-- `critical` and `high` block
-- `unknown` requires review
-- `medium` warns
-- secrets in scope block even when the scanner severity is low
-- known-exploited findings at medium or above block
-- proof-of-concept findings at high block and at medium require review
+- name: Soft-allow warnings
+  if: contains(fromJSON('["PASS","WARN"]'), steps.sentinel.outputs.decision)
 
-Jev can escalate above that floor. It cannot lower it, drop a finding, or introduce a shell command, path, or GitHub operation. The executor only sets outputs, fails or warns the step, writes annotations, and optionally posts a comment.
+- name: Require humans when REVIEW
+  if: steps.sentinel.outputs.decision == 'REVIEW'
+  run: echo "Needs security review"
+```
 
-On a pull request, `gate_scope: changed` leaves findings outside the diff visible with `gate_effect: out_of_scope`. If the changed-file list cannot be loaded, every finding is treated as in scope.
+`BLOCK` fails the step by default. Use `if: always()` on follow-up steps that must still print outputs after a failed gate.
 
-Low confidence and Jev outages:
+## Authentication
 
-| Policy | Result |
+Create secrets under **Settings → Secrets and variables → Actions → New repository secret**.
+
+| Secret | When |
 | --- | --- |
-| `fail` | Provisional decision at least `REVIEW`, job fails. A blocking floor still blocks. |
-| `warn` | At least `WARN` |
-| `request-review` | At least `REVIEW` |
-| `no-op` | Deterministic floor only. This is explicitly not a Jev decision. |
+| `AI_GATEWAY_API_KEY` | Default `jev_provider: vercel-ai-gateway` |
+| `TYPESAFE_API_KEY` | `jev_provider: typesafe-native` |
+| `JEV_CUSTOM_API_KEY` | `jev_provider: custom-compatible` |
+| `SNYK_TOKEN` | `fetch_snyk: true` |
+| `VERACODE_API_ID` / `VERACODE_API_KEY` | `fetch_veracode: true` |
+| `SEMGREP_APP_TOKEN` | `fetch_semgrep: true` |
 
-Valid and rejected payloads are listed in [docs/decision-contract.md](docs/decision-contract.md).
+```yaml
+env:
+  AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+```
 
-## Data sent to Jev
-
-The evaluation state contains:
-
-- environment, component, and gate scope
-- the policy floor and severity counts
-- up to `max_findings_to_jev` prioritized records: id, category, severity, exploitability, rule, path, CVE, and title
-
-Secret findings contribute the rule id only. Messages are redacted. The policy still evaluates findings that were not included in the sample, so a critical finding past the sample limit can still block.
-
-Provider requests use zero data retention on the Vercel AI Gateway adapter. Custom endpoints must be HTTPS.
+Do not put API keys in `with:`. Providers never fall back to each other.
 
 ## Permissions
+
+Minimum for local reports + PR file scope:
 
 ```yaml
 permissions:
@@ -146,21 +276,73 @@ permissions:
   pull-requests: read
 ```
 
-Add `pull-requests: write` only when `comment_on_github` is true. Add `security-events: read` only when `fetch_ghas` is true.
+| Extra permission | When |
+| --- | --- |
+| `pull-requests: write` | `comment_on_github: true` |
+| `security-events: read` | `fetch_ghas: true` |
+
+## Decision model
+
+Default **production** floor:
+
+* `critical` / `high` → block
+* `unknown` → review
+* `medium` → warn
+* secrets in scope → block (even at low scanner severity)
+* known-exploited at medium+ → block
+* proof-of-concept at high → block; at medium → review
+
+On pull requests, `gate_scope: changed` marks findings outside the diff as `out_of_scope` (still listed). If changed paths cannot be loaded, findings are treated as in scope.
+
+| `low_confidence_policy` | Behavior |
+| --- | --- |
+| `fail` | At least `REVIEW`, job fails (blocking floor still blocks) |
+| `warn` | At least `WARN` |
+| `request-review` | At least `REVIEW` |
+| `no-op` | Deterministic floor only (explicitly not a Jev decision) |
+
+Contract examples: [docs/decision-contract.md](docs/decision-contract.md).
+
+## Data sent to Jev
+
+* Environment, component, gate scope, policy floor, severity counts
+* Up to `max_findings_to_jev` prioritized records (id, category, severity, exploitability, rule, path, CVE, title)
+
+Secret findings send the rule id only. Messages are redacted. Findings beyond the sample still affect the local policy floor. Gateway requests use zero data retention. Custom endpoints must be HTTPS.
 
 ## Configuration
 
-`.jev/config.yml` supplies the same provider and policy fields as the inputs. Inputs win when they are set. See [examples/.jev/config.yml](examples/.jev/config.yml).
+Optional `.jev/config.yml` supplies provider and policy defaults. Workflow inputs win when set. See [`examples/.jev/config.yml`](examples/.jev/config.yml).
 
-Allowlist entries (`rule_ids`, `cves`, `fingerprints`, `paths`, `ids`) mark matching findings as `allowlisted`. `exclude_paths` marks them `out_of_scope`. Both groups remain in `findings`.
+Allowlist (`rule_ids`, `cves`, `fingerprints`, `paths`, `ids`) sets `gate_effect: allowlisted`. `exclude_paths` sets `out_of_scope`. Both remain in `findings`.
 
 ## Troubleshooting
 
-- `JEV_UNAVAILABLE` with `provisional: true`: the selected provider was missing a credential, timed out, or returned HTTP 4xx/5xx. The job fails when `low_confidence_policy` is `fail`.
-- `SCHEMA_REJECTED`: Jev returned a choice other than PASS, WARN, BLOCK, or REVIEW. The floor is used instead.
-- `SOURCE_UNAVAILABLE`: a configured file was missing, escaped the workspace, or a scanner API failed.
-- `CHANGED_PATHS_UNKNOWN`: the pull request file list could not be read, so the gate treated findings as in scope.
-- `FINDINGS_TRUNCATED`: more than `max_findings` were collected. The gate is at least `REVIEW`.
+| Signal | Meaning |
+| --- | --- |
+| `JEV_UNAVAILABLE` + `provisional: true` | Missing credential, timeout, or HTTP error for the selected provider |
+| `SCHEMA_REJECTED` | Jev returned an invalid choice; floor is used |
+| `SOURCE_UNAVAILABLE` | Missing report, path escaped workspace, or scanner API failed |
+| `CHANGED_PATHS_UNKNOWN` | PR file list unavailable; findings treated as in scope |
+| `FINDINGS_TRUNCATED` | More than `max_findings`; gate is at least `REVIEW` |
+
+## Security
+
+* Secrets and raw secret matches are redacted before Jev and logs
+* Report paths are confined to the workspace
+* Jev explanation text is never executed as a command, path, or GitHub operation
+* Allowed side effects: set outputs, fail/warn the step, annotate files, optional comment
+
+See [SECURITY.md](SECURITY.md).
+
+## Versioning
+
+```yaml
+uses: JevForge/jev-security-sentinel@v0      # floating major
+uses: JevForge/jev-security-sentinel@v0.1.0 # exact release
+```
+
+Prefer an exact tag or commit SHA for production workflows.
 
 ## Development
 
@@ -171,8 +353,12 @@ npm run typecheck
 npm run build
 ```
 
-Node.js 24 is required. `dist/index.js` is the Action entrypoint and must be rebuilt before release. Tests cover schema rejection, scanner normalization, provider failures, allowlists, and the rule that Jev cannot hide a blocking finding.
+Node.js 24+. Consumers run `dist/index.js` and do not need `npm install`. Rebuild and commit `dist/` when the entrypoint changes.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug and feature templates live under `.github/ISSUE_TEMPLATE/`.
 
 ## License
 
-MIT. See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
+MIT — [LICENSE](LICENSE).

@@ -1,12 +1,26 @@
-# Marketplace listing
+# Marketplace readiness
 
-- Listing name: JEV Security Sentinel
-- Short description (≤125 chars): `Contextual gate for SAST, SCA, IaC, secrets, and containers. Jev returns PASS, WARN, BLOCK, or REVIEW.`
-- Primary category: Security
-- Secondary category: Continuous integration
-- Branding: shield / red (`action.yml`)
-- Pricing: free, MIT
+## Short description (≤125 characters)
 
-GitHub has no public API for the **Publish this Action to the GitHub Marketplace** checkbox. After `v0.1.0` exists, open the release page, tick that box (requires org Marketplace Developer Agreement + 2FA), choose the categories above, and publish.
+```text
+Turn scanner findings into a CI gate. Jev proposes PASS, WARN, BLOCK, or REVIEW; policy never hides findings.
+```
 
-Later version tags keep the listing; they do not need the checkbox again unless you re-feature a release.
+## Listing fields
+
+| Field | Value |
+| --- | --- |
+| Name | JEV Security Sentinel |
+| Primary category | Security |
+| Secondary category | Continuous integration |
+| Branding | `shield` / `red` in `action.yml` |
+| Pricing | Free (MIT) |
+
+## Publish checklist
+
+1. Public repository with root `action.yml` — done.
+2. GitHub Release with a semver tag (`v0.1.0`) — done.
+3. Accept the GitHub Marketplace Developer Agreement for the JevForge org (one-time).
+4. Edit the release → check **Publish this Action to the GitHub Marketplace** → choose categories → update release (requires 2FA).
+
+GitHub does not expose a public API for step 4. Later version tags keep the same listing.

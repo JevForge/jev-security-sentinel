@@ -52495,6 +52495,13 @@ async function runSentinel(params) {
 var import_node_fs3 = require("node:fs");
 var import_node_path3 = require("node:path");
 var OUTPUT_LIMIT = 6e4;
+var LOG_PREFIX = "[JEV Security Sentinel]";
+function formatActionMessage(message) {
+  const trimmed = message.trim();
+  if (!trimmed) return LOG_PREFIX;
+  if (trimmed.startsWith(LOG_PREFIX)) return trimmed;
+  return `${LOG_PREFIX} ${trimmed}`;
+}
 function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
   const findingsJson = JSON.stringify(decision.findings);
   const spilled = findingsJson.length > OUTPUT_LIMIT;
@@ -52525,10 +52532,16 @@ function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
     writer.setOutput("findings_file", "");
   }
   writer.setOutput("findings_spilled", String(spilled));
-  if (actionStatus === "fail") writer.setFailed(`${decision.decision}: ${decision.explanation || decision.reason_codes.join(",")}`);
-  else if (actionStatus === "warn") writer.warning(decision.explanation || "Security gate warning");
-  else if (actionStatus === "request-review") writer.warning("Security gate requires human review");
-  else writer.info(decision.explanation || decision.decision);
+  if (actionStatus === "fail") {
+    const detail = decision.explanation || decision.reason_codes.join(",");
+    writer.setFailed(formatActionMessage(`${decision.decision}: ${detail}`));
+  } else if (actionStatus === "warn") {
+    writer.warning(formatActionMessage(decision.explanation || "Security gate warning"));
+  } else if (actionStatus === "request-review") {
+    writer.warning(formatActionMessage("Security gate requires human review"));
+  } else {
+    writer.info(formatActionMessage(decision.explanation || decision.decision));
+  }
   return { spilled };
 }
 
@@ -52660,7 +52673,9 @@ async function main() {
     } catch (error2) {
       changedUnknown = true;
       changedPaths = null;
-      core.warning(`Could not list pull request files: ${safeRemoteMessage(error2)}`);
+      core.warning(
+        formatActionMessage(`Could not list pull request files: ${safeRemoteMessage(error2)}`)
+      );
     }
   } else if (gateScope === "changed") {
     changedUnknown = true;
@@ -52678,9 +52693,11 @@ async function main() {
     maxFindings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
     remote
   });
-  core.info(`Jev provider: ${jevProvider}`);
+  core.info(formatActionMessage(`Jev provider: ${jevProvider}`));
   core.info(
-    "Data sent to Jev: environment, component, gate scope, severity counts, and a redacted sample of finding ids, rules, paths, and titles. Secrets, tokens, and raw secret matches are not sent."
+    formatActionMessage(
+      "Data sent to Jev: environment, component, gate scope, severity counts, and a redacted sample of finding ids, rules, paths, and titles. Secrets, tokens, and raw secret matches are not sent."
+    )
   );
   const provider = createJevProvider({
     provider: jevProvider,
@@ -52750,11 +52767,11 @@ async function main() {
       else writer.notice(annotation.message, payload);
     }
   }
-  core.info(`Comment: ${result.commentStatus}`);
-  core.info(`Effects: ${result.effects.effects.join(",")}`);
+  core.info(formatActionMessage(`Comment: ${result.commentStatus}`));
+  core.info(formatActionMessage(`Effects: ${result.effects.effects.join(",")}`));
 }
 main().catch((error2) => {
   const message = error2 instanceof Error ? error2.message : String(error2);
-  core.setFailed(message);
+  core.setFailed(formatActionMessage(message));
 });
 //# sourceMappingURL=index.js.map

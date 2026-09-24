@@ -6,7 +6,7 @@ import { listChangedPaths } from './collectors/github-context.js';
 import { fetchGhasAlerts, fetchSemgrepFindings, fetchSnykIssues, fetchVeracodeFindings, safeRemoteMessage } from './collectors/remote.js';
 import { createJevProvider } from './jev/factory.js';
 import { runSentinel } from './run.js';
-import { writeDecisionOutputs } from './github/outputs.js';
+import { writeDecisionOutputs, formatActionMessage } from './github/outputs.js';
 import type { SourceError } from './schemas/sentinel.js';
 function optionalBoolean(name: string, fallback: boolean): boolean {
   const raw = core.getInput(name);
@@ -150,7 +150,9 @@ async function main(): Promise<void> {
     } catch (error) {
       changedUnknown = true;
       changedPaths = null;
-      core.warning(`Could not list pull request files: ${safeRemoteMessage(error)}`);
+      core.warning(
+        formatActionMessage(`Could not list pull request files: ${safeRemoteMessage(error)}`),
+      );
     }
   } else if (gateScope === 'changed') {
     changedUnknown = true;
@@ -170,9 +172,11 @@ async function main(): Promise<void> {
     remote,
   });
 
-  core.info(`Jev provider: ${jevProvider}`);
+  core.info(formatActionMessage(`Jev provider: ${jevProvider}`));
   core.info(
-    'Data sent to Jev: environment, component, gate scope, severity counts, and a redacted sample of finding ids, rules, paths, and titles. Secrets, tokens, and raw secret matches are not sent.',
+    formatActionMessage(
+      'Data sent to Jev: environment, component, gate scope, severity counts, and a redacted sample of finding ids, rules, paths, and titles. Secrets, tokens, and raw secret matches are not sent.',
+    ),
   );
 
   const provider = createJevProvider({
@@ -253,11 +257,11 @@ async function main(): Promise<void> {
       else writer.notice(annotation.message, payload);
     }
   }
-  core.info(`Comment: ${result.commentStatus}`);
-  core.info(`Effects: ${result.effects.effects.join(',')}`);
+  core.info(formatActionMessage(`Comment: ${result.commentStatus}`));
+  core.info(formatActionMessage(`Effects: ${result.effects.effects.join(',')}`));
 }
 
 main().catch(error => {
   const message = error instanceof Error ? error.message : String(error);
-  core.setFailed(message);
+  core.setFailed(formatActionMessage(message));
 });

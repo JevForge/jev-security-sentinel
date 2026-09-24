@@ -1,7 +1,7 @@
 {
   "name": "jev-security-sentinel",
   "version": "0.1.0",
-  "description": "GitHub Action that uses Jev to gate SAST, SCA, IaC, secrets, and container findings without hiding them.",
+  "description": "GitHub Action that gates SAST, SCA, IaC, secrets, and container findings with Jev without hiding them.",
   "private": true,
   "type": "module",
   "engines": {

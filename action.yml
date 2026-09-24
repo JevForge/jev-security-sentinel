@@ -1,5 +1,5 @@
 name: JEV Security Sentinel
-description: Contextual gate for SAST, SCA, IaC, secrets, and containers. Jev returns PASS, WARN, BLOCK, or REVIEW.
+description: Turn scanner findings into a CI gate. Jev proposes PASS, WARN, BLOCK, or REVIEW; policy never hides findings.
 author: JevForge
 branding:
   icon: shield

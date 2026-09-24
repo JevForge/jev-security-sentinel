@@ -14,6 +14,15 @@ export interface ActionOutputWriter {
 
 const OUTPUT_LIMIT = 60_000;
 
+const LOG_PREFIX = '[JEV Security Sentinel]';
+
+export function formatActionMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return LOG_PREFIX;
+  if (trimmed.startsWith(LOG_PREFIX)) return trimmed;
+  return `${LOG_PREFIX} ${trimmed}`;
+}
+
 export function writeDecisionOutputs(
   writer: ActionOutputWriter,
   decision: SentinelDecision,
@@ -50,10 +59,16 @@ export function writeDecisionOutputs(
   }
   writer.setOutput('findings_spilled', String(spilled));
 
-  if (actionStatus === 'fail') writer.setFailed(`${decision.decision}: ${decision.explanation || decision.reason_codes.join(',')}`);
-  else if (actionStatus === 'warn') writer.warning(decision.explanation || 'Security gate warning');
-  else if (actionStatus === 'request-review') writer.warning('Security gate requires human review');
-  else writer.info(decision.explanation || decision.decision);
+  if (actionStatus === 'fail') {
+    const detail = decision.explanation || decision.reason_codes.join(',');
+    writer.setFailed(formatActionMessage(`${decision.decision}: ${detail}`));
+  } else if (actionStatus === 'warn') {
+    writer.warning(formatActionMessage(decision.explanation || 'Security gate warning'));
+  } else if (actionStatus === 'request-review') {
+    writer.warning(formatActionMessage('Security gate requires human review'));
+  } else {
+    writer.info(formatActionMessage(decision.explanation || decision.decision));
+  }
 
   return { spilled };
 }

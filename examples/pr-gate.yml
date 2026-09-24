@@ -1,0 +1,40 @@
+name: PR security gate
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.sentinel.outputs.decision }}
+      blocking_count: ${{ steps.sentinel.outputs.blocking_count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sentinel
+        uses: JevForge/jev-security-sentinel@v0.1.0
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        with:
+          sarif_path: reports/semgrep.sarif
+          trivy_path: reports/trivy.json
+          environment: production
+          gate_scope: changed
+          comment_on_github: 'true'
+          annotate: 'true'
+          review_mode: fail
+
+      - name: Soft path for WARN
+        if: always() && steps.sentinel.outputs.decision == 'WARN'
+        run: echo "Gate warned — review findings before merge"
+
+  continue-when-clear:
+    needs: gate
+    if: needs.gate.outputs.decision == 'PASS' || needs.gate.outputs.decision == 'WARN'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Downstream checks may continue"

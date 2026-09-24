@@ -11,15 +11,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - id: sentinel
         uses: JevForge/jev-security-sentinel@v0.1.0
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
         with:
-          sarif_path: reports/semgrep.sarif
-          trivy_path: reports/trivy.json
+          sarif_path: reports/results.sarif
           environment: production
           gate_scope: changed
-      - name: Print decision
+
+      - name: Show gate result
         if: always()
-        run: echo "${{ steps.sentinel.outputs.summary }}"
+        run: |
+          echo "decision=${{ steps.sentinel.outputs.decision }}"
+          echo "policy_floor=${{ steps.sentinel.outputs.policy_floor }}"
+          echo "blocking_count=${{ steps.sentinel.outputs.blocking_count }}"
+          echo "provisional=${{ steps.sentinel.outputs.provisional }}"

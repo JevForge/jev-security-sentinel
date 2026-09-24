@@ -1,28 +1,28 @@
 # Security policy
 
-Report vulnerabilities privately to the JevForge maintainers. Do not open a public issue that includes secrets, raw scanner matches, or customer findings.
+## Reporting a vulnerability
 
-## What this Action does
+Do **not** open a public issue that includes secrets, tokens, raw scanner secret matches, or customer findings.
 
-JEV Security Sentinel reads security findings and asks Jev for a gate decision: `PASS`, `WARN`, `BLOCK`, or `REVIEW`. A deterministic policy then keeps every finding visible and refuses any Jev choice that is weaker than the configured floor.
+Prefer GitHub private vulnerability reporting for this repository when available (**Security → Advisories / Report a vulnerability**). Otherwise contact the JevForge organization maintainers through a private channel.
 
-The Action does not exploit vulnerabilities, rewrite code, or run shell commands from model output.
+## Scope
 
-## Data sent to Jev
+JEV Security Sentinel reads security findings and asks Jev for a gate decision (`PASS`, `WARN`, `BLOCK`, `REVIEW`). A deterministic policy keeps every finding visible and refuses any Jev choice weaker than the configured floor.
 
-- Environment, component, and gate scope
-- Counts by severity
-- A bounded sample of finding ids, rules, paths, titles, CVEs, and gate effects
+The Action does not exploit vulnerabilities, rewrite application code, or run shell commands from model output.
 
-Secret matches, tokens, and raw secret-scanning values are dropped before the sample is built. Titles and messages pass through redaction. Provider credentials are sent only to the selected Jev endpoint.
+## Data handling
 
-## Credentials
+Sent to Jev (selected provider only):
 
-Set provider and scanner secrets in the environment, never as Action inputs:
+* Environment, component, gate scope, policy floor, severity counts
+* A bounded, redacted sample of finding metadata
 
-- `AI_GATEWAY_API_KEY` for `vercel-ai-gateway`
-- `TYPESAFE_API_KEY` for `typesafe-native`
-- `JEV_CUSTOM_API_KEY` for `custom-compatible`
-- `SNYK_TOKEN`, `VERACODE_API_ID`, `VERACODE_API_KEY`, `SEMGREP_APP_TOKEN` only when those fetches are enabled
+Not sent:
 
-There is no silent fallback between Jev providers. Custom endpoints must be HTTPS.
+* Provider and scanner API keys (used only for auth to the selected endpoint)
+* Raw secret-scanning match values
+* Arbitrary free-form instructions as executable commands
+
+Paths must remain inside `GITHUB_WORKSPACE`. Custom Jev endpoints must be HTTPS. There is no silent fallback between Jev providers.
