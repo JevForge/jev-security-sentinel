@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: sentinel
+        continue-on-error: true
         uses: ./
         with:
           findings_path: tests/fixtures/findings.json
@@ -35,10 +36,12 @@ jobs:
           structured_logs: 'true'
 
       - name: Assert fixture decision outputs
-        if: always()
         run: |
           echo "decision=${{ steps.sentinel.outputs.decision }}"
           echo "policy_floor=${{ steps.sentinel.outputs.policy_floor }}"
           echo "findings_count=${{ steps.sentinel.outputs.findings_count }}"
-          test -n "${{ steps.sentinel.outputs.decision }}"
+          echo "outcome=${{ steps.sentinel.outcome }}"
+          test "${{ steps.sentinel.outputs.decision }}" = "BLOCK"
+          test "${{ steps.sentinel.outputs.policy_floor }}" = "BLOCK"
           test "${{ steps.sentinel.outputs.findings_count }}" = "2"
+          test "${{ steps.sentinel.outcome }}" = "failure"
