@@ -71,6 +71,8 @@ function buildReasons(input: {
   if (inScope.some(finding => finding.category === 'sast')) pushCode(codes, 'SAST_FINDING');
   if (inScope.some(finding => finding.category === 'container')) pushCode(codes, 'CONTAINER_VULNERABILITY');
   if (inScope.some(finding => finding.category === 'license')) pushCode(codes, 'LICENSE_ISSUE');
+  if (input.findings.some(finding => finding.kev)) pushCode(codes, 'KEV_MATCHED');
+  if (input.findings.some(finding => finding.epss !== null)) pushCode(codes, 'EPSS_ENRICHED');
   if (input.findings.some(finding => finding.environment === 'production')) {
     pushCode(codes, 'PRODUCTION_ENVIRONMENT');
   }
