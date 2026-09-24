@@ -10,22 +10,22 @@ inputs:
     description: Inline JSON array of normalized findings, or an object with findings[].
     required: false
   findings_path:
-    description: Workspace path to normalized findings JSON.
+    description: Workspace path(s) to normalized findings JSON. Comma/newline list or glob (e.g. reports/*.json).
     required: false
   sarif_path:
-    description: Workspace path to a SARIF 2.1.0 report.
+    description: Workspace path(s) to SARIF 2.1.0. Comma/newline list or glob (e.g. reports/**/*.sarif).
     required: false
   semgrep_path:
-    description: Workspace path to Semgrep JSON (results[] or findings[]).
+    description: Workspace path(s) to Semgrep JSON. Comma/newline list or glob.
     required: false
   trivy_path:
-    description: Workspace path to a Trivy JSON report.
+    description: Workspace path(s) to Trivy JSON. Comma/newline list or glob.
     required: false
   snyk_path:
-    description: Workspace path to Snyk CLI JSON or Snyk REST issues JSON.
+    description: Workspace path(s) to Snyk JSON. Comma/newline list or glob.
     required: false
   veracode_path:
-    description: Workspace path to a Veracode findings JSON export.
+    description: Workspace path(s) to Veracode findings JSON. Comma/newline list or glob.
     required: false
   fetch_ghas:
     description: Fetch open GitHub code scanning, secret scanning, and Dependabot alerts.

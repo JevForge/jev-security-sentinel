@@ -27844,10 +27844,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep, value } = collItem;
+        const { start, key, sep: sep2, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep?.[0],
+          next: key ?? sep2?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -27861,7 +27861,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep) {
+          if (!keyProps.anchor && !keyProps.tag && !sep2) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map.comment)
@@ -27885,7 +27885,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep ?? [], {
+        const valueProps = resolveProps.resolveProps(sep2 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -27901,7 +27901,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep2, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -27992,7 +27992,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep = "";
+        let sep2 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -28006,13 +28006,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep + cb;
-              sep = "";
+                comment += sep2 + cb;
+              sep2 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep += source;
+                sep2 += source;
               hasSpace = true;
               break;
             default:
@@ -28055,18 +28055,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep, value } = collItem;
+        const { start, key, sep: sep2, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep?.[0],
+          next: key ?? sep2?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep && !value) {
+          if (!props.anchor && !props.tag && !sep2 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -28120,8 +28120,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep, null, props, onError);
+        if (!isMap && !sep2 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep2, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -28133,7 +28133,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep ?? [], {
+          const valueProps = resolveProps.resolveProps(sep2 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -28144,8 +28144,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep)
-                for (const st of sep) {
+              if (sep2)
+                for (const st of sep2) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -28162,7 +28162,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep2, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -28342,7 +28342,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep = "";
+      let sep2 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines[i][0].slice(trimIndent) + "\n";
@@ -28359,24 +28359,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep + indent.slice(trimIndent) + content;
-          sep = "\n";
+          value += sep2 + indent.slice(trimIndent) + content;
+          sep2 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep === " ")
-            sep = "\n";
-          else if (!prevMoreIndented && sep === "\n")
-            sep = "\n\n";
-          value += sep + indent.slice(trimIndent) + content;
-          sep = "\n";
+          if (sep2 === " ")
+            sep2 = "\n";
+          else if (!prevMoreIndented && sep2 === "\n")
+            sep2 = "\n\n";
+          value += sep2 + indent.slice(trimIndent) + content;
+          sep2 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep === "\n")
+          if (sep2 === "\n")
             value += "\n";
           else
-            sep = "\n";
+            sep2 = "\n";
         } else {
-          value += sep + content;
-          sep = " ";
+          value += sep2 + content;
+          sep2 = " ";
           prevMoreIndented = false;
         }
       }
@@ -28559,25 +28559,25 @@ var require_resolve_flow_scalar = __commonJS({
         trimBoth = /^[ \t]+|[ \t]+$/g;
       }
       let res = match[1].replace(trimEnd, "");
-      let sep = " ";
+      let sep2 = " ";
       let pos = line.lastIndex;
       while (match = line.exec(source)) {
         const lm = match[1].replace(trimBoth, "");
         if (lm === "") {
-          if (sep === "\n")
-            res += sep;
+          if (sep2 === "\n")
+            res += sep2;
           else
-            sep = "\n";
+            sep2 = "\n";
         } else {
-          res += sep + lm;
-          sep = " ";
+          res += sep2 + lm;
+          sep2 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep + (match?.[1] ?? "");
+      return res + sep2 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -29387,14 +29387,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep, value }) {
+    function stringifyItem({ start, key, sep: sep2, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep)
-        for (const st of sep)
+      if (sep2)
+        for (const st of sep2)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -30561,18 +30561,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep;
+          let sep2;
           if (scalar.end) {
-            sep = scalar.end;
-            sep.push(this.sourceToken);
+            sep2 = scalar.end;
+            sep2.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep = [this.sourceToken];
+            sep2 = [this.sourceToken];
           const map = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep }]
+            items: [{ start, key: scalar, sep: sep2 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map;
@@ -30725,15 +30725,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep = it.sep;
-                  sep.push(this.sourceToken);
+                  const sep2 = it.sep;
+                  sep2.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep }]
+                    items: [{ start: start2, key, sep: sep2 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -30927,13 +30927,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep = fc.end.splice(1, fc.end.length);
-            sep.push(this.sourceToken);
+            const sep2 = fc.end.splice(1, fc.end.length);
+            sep2.push(this.sourceToken);
             const map = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep }]
+              items: [{ start, key: fc, sep: sep2 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map;
@@ -36398,7 +36398,7 @@ function coalesceSourceErrors(input, config2) {
 }
 
 // src/collectors/load.ts
-var import_node_fs2 = require("node:fs");
+var import_node_fs3 = require("node:fs");
 
 // src/utils/sanitize.ts
 var SECRET_PATTERNS = [
@@ -36886,6 +36886,21 @@ function parseDependabot(data) {
   });
 }
 
+// src/utils/report-paths.ts
+var import_node_fs2 = require("node:fs");
+var import_node_path3 = require("node:path");
+
+// src/utils/glob.ts
+function matchGlob(pattern, value) {
+  const normalized = value.replace(/\\/g, "/");
+  const source = pattern.replace(/\\/g, "/").replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "::DS::").replace(/\*/g, "[^/]*").replace(/::DS::/g, ".*");
+  return new RegExp(`^${source}$`).test(normalized);
+}
+function matchesAnyGlob(patterns, value) {
+  if (!value || patterns.length === 0) return false;
+  return patterns.some((pattern) => matchGlob(pattern, value));
+}
+
 // src/utils/workspace-path.ts
 var import_node_path2 = require("node:path");
 function resolveInsideWorkspace(workspace, userPath) {
@@ -36894,6 +36909,83 @@ function resolveInsideWorkspace(workspace, userPath) {
   const rel = (0, import_node_path2.relative)(root, full);
   if (!rel || rel.startsWith("..") || (0, import_node_path2.isAbsolute)(rel)) return null;
   return full;
+}
+
+// src/utils/report-paths.ts
+var GLOB_CHARS = /[*?]/;
+function splitPathInput(raw) {
+  if (!raw?.trim()) return [];
+  return raw.split(/[\n,]+/).map((part) => part.trim()).filter(Boolean);
+}
+function hasGlob(pattern) {
+  return GLOB_CHARS.test(pattern);
+}
+function walkFiles(root, dir, out) {
+  let entries;
+  try {
+    entries = (0, import_node_fs2.readdirSync)(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = (0, import_node_path3.join)(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      walkFiles(root, full, out);
+    } else if (entry.isFile()) {
+      out.push((0, import_node_path3.relative)(root, full).split(import_node_path3.sep).join("/"));
+    }
+  }
+}
+function listWorkspaceFiles(workspace) {
+  const files = [];
+  walkFiles(workspace, workspace, files);
+  return files;
+}
+function expandReportPaths(workspace, patterns) {
+  const errors = [];
+  const seen = /* @__PURE__ */ new Set();
+  const paths = [];
+  let workspaceFiles = null;
+  for (const pattern of patterns) {
+    const normalized = pattern.replace(/\\/g, "/");
+    if (hasGlob(normalized)) {
+      if (!workspaceFiles) workspaceFiles = listWorkspaceFiles(workspace);
+      for (const file of workspaceFiles) {
+        if (!matchGlob(normalized, file)) continue;
+        if (seen.has(file)) continue;
+        const full2 = resolveInsideWorkspace(workspace, file);
+        if (!full2) continue;
+        seen.add(file);
+        paths.push(file);
+      }
+      continue;
+    }
+    const full = resolveInsideWorkspace(workspace, normalized);
+    if (!full) {
+      errors.push(`Path escapes the workspace: ${normalized}`);
+      continue;
+    }
+    try {
+      const st = (0, import_node_fs2.statSync)(full);
+      if (!st.isFile()) {
+        errors.push(`Not a file: ${normalized}`);
+        continue;
+      }
+    } catch (error2) {
+      const message = error2 instanceof Error ? error2.message : String(error2);
+      errors.push(`${normalized}: ${message.slice(0, 120)}`);
+      continue;
+    }
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      paths.push(normalized);
+    }
+  }
+  return { paths, errors };
+}
+function resolveReportPathInput(workspace, raw) {
+  return expandReportPaths(workspace, splitPathInput(raw));
 }
 
 // src/collectors/load.ts
@@ -36905,12 +36997,12 @@ function readJson(workspace, userPath, source, errors) {
     return void 0;
   }
   try {
-    const size = (0, import_node_fs2.statSync)(full).size;
+    const size = (0, import_node_fs3.statSync)(full).size;
     if (size > MAX_BYTES) {
       errors.push({ source, message: "Report exceeds 20MB" });
       return void 0;
     }
-    return JSON.parse((0, import_node_fs2.readFileSync)(full, "utf8"));
+    return JSON.parse((0, import_node_fs3.readFileSync)(full, "utf8"));
   } catch (error2) {
     const message = error2 instanceof Error ? error2.message : String(error2);
     errors.push({ source, message: message.slice(0, 180) });
@@ -36925,9 +37017,27 @@ function take(source, parser, data, bucket, errors) {
     errors.push({ source, message: message.slice(0, 180) });
   }
 }
+function loadPathGroup(workspace, raw, source, parser, bucket, errors, loadedPaths) {
+  if (!raw?.trim()) return;
+  const resolved = resolveReportPathInput(workspace, raw);
+  for (const message of resolved.errors) {
+    errors.push({ source, message });
+  }
+  if (resolved.paths.length === 0 && resolved.errors.length === 0) {
+    errors.push({ source, message: `No files matched: ${raw.trim().slice(0, 120)}` });
+    return;
+  }
+  for (const path of resolved.paths) {
+    const data = readJson(workspace, path, source, errors);
+    if (data === void 0) continue;
+    take(source, parser, data, bucket, errors);
+    loadedPaths.push(path);
+  }
+}
 function loadFindings(request) {
   const errors = [];
   const bucket = [];
+  const loadedPaths = [];
   if (request.normalizedJson?.trim()) {
     try {
       take("normalized", parseNormalized, JSON.parse(request.normalizedJson), bucket, errors);
@@ -36935,30 +37045,20 @@ function loadFindings(request) {
       errors.push({ source: "normalized", message: "findings JSON input is not valid JSON" });
     }
   }
-  if (request.normalizedPath) {
-    const data = readJson(request.workspace, request.normalizedPath, "normalized", errors);
-    if (data !== void 0) take("normalized", parseNormalized, data, bucket, errors);
-  }
-  if (request.sarifPath) {
-    const data = readJson(request.workspace, request.sarifPath, "sarif", errors);
-    if (data !== void 0) take("sarif", parseSarif, data, bucket, errors);
-  }
-  if (request.semgrepPath) {
-    const data = readJson(request.workspace, request.semgrepPath, "semgrep", errors);
-    if (data !== void 0) take("semgrep", parseSemgrep, data, bucket, errors);
-  }
-  if (request.trivyPath) {
-    const data = readJson(request.workspace, request.trivyPath, "trivy", errors);
-    if (data !== void 0) take("trivy", parseTrivy, data, bucket, errors);
-  }
-  if (request.snykPath) {
-    const data = readJson(request.workspace, request.snykPath, "snyk", errors);
-    if (data !== void 0) take("snyk", parseSnyk, data, bucket, errors);
-  }
-  if (request.veracodePath) {
-    const data = readJson(request.workspace, request.veracodePath, "veracode", errors);
-    if (data !== void 0) take("veracode", parseVeracode, data, bucket, errors);
-  }
+  loadPathGroup(
+    request.workspace,
+    request.normalizedPath,
+    "normalized",
+    parseNormalized,
+    bucket,
+    errors,
+    loadedPaths
+  );
+  loadPathGroup(request.workspace, request.sarifPath, "sarif", parseSarif, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.semgrepPath, "semgrep", parseSemgrep, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.trivyPath, "trivy", parseTrivy, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.snykPath, "snyk", parseSnyk, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.veracodePath, "veracode", parseVeracode, bucket, errors, loadedPaths);
   const remote = request.remote;
   if (remote?.semgrep !== void 0) take("semgrep", parseSemgrep, remote.semgrep, bucket, errors);
   if (remote?.snyk !== void 0) take("snyk", parseSnyk, remote.snyk, bucket, errors);
@@ -36976,22 +37076,23 @@ function loadFindings(request) {
   return {
     findings: truncated ? bucket.slice(0, request.maxFindings) : bucket,
     errors,
-    truncated
+    truncated,
+    loadedPaths
   };
 }
 
 // src/collectors/baseline.ts
-var import_node_fs3 = require("node:fs");
+var import_node_fs4 = require("node:fs");
 function loadBaselineFingerprints(workspace, relativePath) {
   const full = resolveInsideWorkspace(workspace, relativePath);
   if (!full) {
     return { fingerprints: /* @__PURE__ */ new Set(), error: "Baseline path escapes the workspace" };
   }
-  if (!(0, import_node_fs3.existsSync)(full)) {
+  if (!(0, import_node_fs4.existsSync)(full)) {
     return { fingerprints: /* @__PURE__ */ new Set(), error: `Baseline file not found: ${relativePath}` };
   }
   try {
-    const raw = JSON.parse((0, import_node_fs3.readFileSync)(full, "utf8"));
+    const raw = JSON.parse((0, import_node_fs4.readFileSync)(full, "utf8"));
     const fingerprints = /* @__PURE__ */ new Set();
     if (Array.isArray(raw)) {
       for (const item of raw) {
@@ -52067,17 +52168,6 @@ function fingerprint(parts) {
   return (0, import_node_crypto2.createHash)("sha256").update(raw).digest("hex").slice(0, 16);
 }
 
-// src/utils/glob.ts
-function matchGlob(pattern, value) {
-  const normalized = value.replace(/\\/g, "/");
-  const source = pattern.replace(/\\/g, "/").replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "::DS::").replace(/\*/g, "[^/]*").replace(/::DS::/g, ".*");
-  return new RegExp(`^${source}$`).test(normalized);
-}
-function matchesAnyGlob(patterns, value) {
-  if (!value || patterns.length === 0) return false;
-  return patterns.some((pattern) => matchGlob(pattern, value));
-}
-
 // src/decision/annotate.ts
 var SEVERITY_RANK = {
   critical: 5,
@@ -52555,8 +52645,8 @@ async function runSentinel(params) {
 }
 
 // src/github/outputs.ts
-var import_node_fs4 = require("node:fs");
-var import_node_path3 = require("node:path");
+var import_node_fs5 = require("node:fs");
+var import_node_path4 = require("node:path");
 var OUTPUT_LIMIT = 6e4;
 var LOG_PREFIX = "[JEV Security Sentinel]";
 function formatActionMessage(message) {
@@ -52584,10 +52674,10 @@ function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
     `${decision.decision} floor=${decision.policy_floor} jev=${decision.jev_proposed ?? decision.jev_status} findings=${decision.findings.length}`
   );
   if (spilled && workspace) {
-    const dir = (0, import_node_path3.join)(workspace, ".jev");
-    (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
-    const file = (0, import_node_path3.join)(dir, "security-sentinel-findings.json");
-    (0, import_node_fs4.writeFileSync)(file, findingsJson);
+    const dir = (0, import_node_path4.join)(workspace, ".jev");
+    (0, import_node_fs5.mkdirSync)(dir, { recursive: true });
+    const file = (0, import_node_path4.join)(dir, "security-sentinel-findings.json");
+    (0, import_node_fs5.writeFileSync)(file, findingsJson);
     writer.setOutput("findings", "");
     writer.setOutput("findings_file", file);
   } else {
@@ -52762,6 +52852,13 @@ async function main() {
     maxFindings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
     remote
   });
+  if (loaded.loadedPaths.length > 0) {
+    core.info(
+      formatActionMessage(
+        `Loaded ${loaded.loadedPaths.length} report file(s): ${loaded.loadedPaths.slice(0, 12).join(", ")}${loaded.loadedPaths.length > 12 ? ", \u2026" : ""}`
+      )
+    );
+  }
   let baselineFingerprints = /* @__PURE__ */ new Set();
   const baselinePath = core.getInput("baseline_path") || void 0;
   if (gateMode === "new_only") {

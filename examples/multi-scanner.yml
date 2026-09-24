@@ -22,9 +22,12 @@ jobs:
           VERACODE_API_KEY: ${{ secrets.VERACODE_API_KEY }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         with:
-          semgrep_path: reports/semgrep.json
-          snyk_path: reports/snyk.json
+          semgrep_path: |
+            reports/semgrep.json
+            reports/semgrep-ci.json
+          snyk_path: reports/snyk*.json
           veracode_path: reports/veracode.json
+          sarif_path: reports/**/*.sarif
           fetch_ghas: 'true'
           fetch_snyk: 'false'
           environment: production
