@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-24
+
+### Changed
+
+* Extracted a stable Jev client boundary under `src/jev/core` (prep for a future `@jevforge/core` package). Compatibility shims remain at the previous import paths.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added

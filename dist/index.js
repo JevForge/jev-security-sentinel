@@ -37272,7 +37272,7 @@ function safeRemoteMessage(error2) {
   return redactSecrets(message).slice(0, 180) || "remote source failed";
 }
 
-// src/jev/questions.ts
+// src/jev/core/questions.ts
 function buildGateQuestions() {
   return {
     gate_decision: {
@@ -37303,7 +37303,7 @@ function summarizeState(state) {
   };
 }
 
-// src/jev/normalize.ts
+// src/jev/core/normalize.ts
 function clampConfidence(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
@@ -52172,7 +52172,7 @@ function createVercelAiGatewayProvider(options) {
   };
 }
 
-// src/jev/factory.ts
+// src/jev/core/factory.ts
 function createJevProvider(input) {
   switch (input.provider) {
     case "vercel-ai-gateway":
