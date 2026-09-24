@@ -149,6 +149,10 @@ inputs:
   request_reviewers:
     description: Comma/newline list of GitHub users or team:slug reviewers to request on the PR.
     required: false
+  structured_logs:
+    description: Emit a single JSON summary log line for collectors and decision fields.
+    required: false
+    default: 'false'
   annotate:
     description: Emit workflow annotations for in-scope findings.
     required: false

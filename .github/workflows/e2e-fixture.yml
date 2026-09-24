@@ -1,0 +1,44 @@
+name: E2E fixture gate
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tests/fixtures/**'
+      - 'src/**'
+      - 'dist/**'
+      - 'action.yml'
+      - '.github/workflows/e2e-fixture.yml'
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  fixture-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sentinel
+        uses: ./
+        with:
+          findings_path: tests/fixtures/findings.json
+          environment: production
+          gate_scope: all
+          create_check_run: 'false'
+          annotate: 'false'
+          dry_run: 'true'
+          low_confidence_policy: no-op
+          jev_provider: custom-compatible
+          jev_endpoint: https://example.invalid/evaluate
+          jev_model: fixture
+          structured_logs: 'true'
+
+      - name: Assert fixture decision outputs
+        if: always()
+        run: |
+          echo "decision=${{ steps.sentinel.outputs.decision }}"
+          echo "policy_floor=${{ steps.sentinel.outputs.policy_floor }}"
+          echo "findings_count=${{ steps.sentinel.outputs.findings_count }}"
+          test -n "${{ steps.sentinel.outputs.decision }}"
+          test "${{ steps.sentinel.outputs.findings_count }}" = "2"

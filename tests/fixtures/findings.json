@@ -1,0 +1,24 @@
+[
+  {
+    "source": "normalized",
+    "category": "sast",
+    "severity": "high",
+    "title": "eval detected",
+    "rule_id": "javascript.eval",
+    "path": "src/app.js",
+    "start_line": 4,
+    "exploitability": "unknown",
+    "message": "eval() call"
+  },
+  {
+    "source": "normalized",
+    "category": "sca",
+    "severity": "medium",
+    "title": "lodash",
+    "rule_id": "CVE-2021-23337",
+    "path": "package.json",
+    "cve": "CVE-2021-23337",
+    "exploitability": "poc",
+    "component": "lodash"
+  }
+]
