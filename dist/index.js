@@ -36040,6 +36040,7 @@ var ENVIRONMENTS = [
   "unknown"
 ];
 var GATE_SCOPES = ["all", "changed"];
+var GATE_MODES = ["all", "new_only"];
 var JEV_PROVIDERS = [
   "vercel-ai-gateway",
   "typesafe-native",
@@ -36054,6 +36055,7 @@ var GATE_EFFECTS = [
   "review",
   "allowlisted",
   "out_of_scope",
+  "baseline",
   "informational"
 ];
 var JEV_STATUSES = ["evaluated", "unavailable", "schema_rejected"];
@@ -36089,7 +36091,9 @@ var REASON_CODES = [
   "REVIEW_REQUIRED",
   "SOURCE_UNAVAILABLE",
   "CHANGED_PATHS_UNKNOWN",
-  "BLOCK_SECRETS"
+  "BLOCK_SECRETS",
+  "BASELINE_MATCHED",
+  "NEW_FINDINGS_ONLY"
 ];
 var DECISION_RANK = {
   PASS: 0,
@@ -36101,6 +36105,7 @@ var EFFECT_RANK = {
   informational: 0,
   out_of_scope: 0,
   allowlisted: 0,
+  baseline: 0,
   warning: 1,
   review: 2,
   blocking: 3
@@ -36124,6 +36129,7 @@ var FindingSchema = external_exports.object({
   in_change: external_exports.boolean(),
   allowlisted: external_exports.boolean(),
   excluded: external_exports.boolean(),
+  baseline_matched: external_exports.boolean().default(false),
   gate_effect: external_exports.enum(GATE_EFFECTS),
   message: external_exports.string().max(500)
 }).strict();
@@ -36156,6 +36162,7 @@ var RiskSummarySchema = external_exports.object({
   review: external_exports.number().int().nonnegative(),
   allowlisted: external_exports.number().int().nonnegative(),
   out_of_scope: external_exports.number().int().nonnegative(),
+  baseline: external_exports.number().int().nonnegative(),
   by_severity: severityCounts,
   by_category: categoryCounts,
   highest_severity: external_exports.enum([...SEVERITIES, "none"]),
@@ -36300,6 +36307,7 @@ var RunOptionsSchema = external_exports.object({
   environment: external_exports.enum(ENVIRONMENTS).default("production"),
   component: external_exports.string().max(128).default(""),
   gate_scope: external_exports.enum(GATE_SCOPES).default("all"),
+  gate_mode: external_exports.enum(GATE_MODES).default("all"),
   min_confidence: external_exports.number().min(0).max(1).default(0.75),
   low_confidence_policy: external_exports.enum(LOW_CONFIDENCE_POLICIES).default("fail"),
   source_error_policy: external_exports.enum(SOURCE_ERROR_POLICIES).default("fail"),
@@ -36331,6 +36339,7 @@ var FileConfigSchema = external_exports.object({
   environment: external_exports.enum(ENVIRONMENTS).optional(),
   component: external_exports.string().max(128).optional(),
   gate_scope: external_exports.enum(GATE_SCOPES).optional(),
+  gate_mode: external_exports.enum(GATE_MODES).optional(),
   block_secrets: external_exports.boolean().optional(),
   escalate_known_exploited: external_exports.boolean().optional(),
   escalate_poc: external_exports.boolean().optional(),
@@ -36969,6 +36978,46 @@ function loadFindings(request) {
     errors,
     truncated
   };
+}
+
+// src/collectors/baseline.ts
+var import_node_fs3 = require("node:fs");
+function loadBaselineFingerprints(workspace, relativePath) {
+  const full = resolveInsideWorkspace(workspace, relativePath);
+  if (!full) {
+    return { fingerprints: /* @__PURE__ */ new Set(), error: "Baseline path escapes the workspace" };
+  }
+  if (!(0, import_node_fs3.existsSync)(full)) {
+    return { fingerprints: /* @__PURE__ */ new Set(), error: `Baseline file not found: ${relativePath}` };
+  }
+  try {
+    const raw = JSON.parse((0, import_node_fs3.readFileSync)(full, "utf8"));
+    const fingerprints = /* @__PURE__ */ new Set();
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (typeof item === "string" && item.length >= 8) fingerprints.add(item);
+        else {
+          const record2 = asRecord(item);
+          const fp = text(record2?.fingerprint);
+          if (fp.length >= 8) fingerprints.add(fp);
+        }
+      }
+    } else {
+      const record2 = asRecord(raw);
+      for (const item of asArray(record2?.fingerprints)) {
+        if (typeof item === "string" && item.length >= 8) fingerprints.add(item);
+      }
+      for (const item of asArray(record2?.findings)) {
+        const finding = asRecord(item);
+        const fp = text(finding?.fingerprint);
+        if (fp.length >= 8) fingerprints.add(fp);
+      }
+    }
+    return { fingerprints };
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : String(error2);
+    return { fingerprints: /* @__PURE__ */ new Set(), error: message.slice(0, 180) };
+  }
 }
 
 // src/collectors/github-context.ts
@@ -52066,6 +52115,8 @@ function pathInChange(filePath, changed) {
   });
 }
 function annotateFindings(input) {
+  const gateMode = input.gateMode ?? "all";
+  const baseline = input.baselineFingerprints ?? /* @__PURE__ */ new Set();
   const seen = /* @__PURE__ */ new Map();
   return input.raw.map((raw) => {
     const exploitability = raw.category === "secrets" && raw.exploitability === "unknown" ? "likely" : raw.exploitability;
@@ -52084,8 +52135,10 @@ function annotateFindings(input) {
     const allowlisted = raw.scanner_suppressed || input.policy.allowlist.rule_ids.includes(raw.rule_id) || input.policy.allowlist.ids.includes(id) || input.policy.allowlist.fingerprints.includes(baseId) || (raw.cve ? input.policy.allowlist.cves.some((cve) => cve.toUpperCase() === raw.cve?.toUpperCase()) : false) || matchesAnyGlob(input.policy.allowlist.paths, raw.path);
     const inChange = pathInChange(raw.path, input.changedPaths);
     const outOfScope = excluded || input.gateScope === "changed" && !inChange;
+    const baselineMatched = gateMode === "new_only" && baseline.has(baseId);
     let gateEffect = "informational";
     if (allowlisted) gateEffect = "allowlisted";
+    else if (baselineMatched) gateEffect = "baseline";
     else if (outOfScope) gateEffect = "out_of_scope";
     else if (raw.category === "secrets" && input.policy.block_secrets) gateEffect = "blocking";
     else {
@@ -52113,6 +52166,7 @@ function annotateFindings(input) {
       in_change: inChange,
       allowlisted,
       excluded,
+      baseline_matched: baselineMatched,
       gate_effect: gateEffect,
       message: raw.message
     };
@@ -52164,6 +52218,10 @@ function buildReasons(input) {
   }
   if (inScope.some((finding) => finding.in_change)) pushCode(codes, "CHANGED_CODE");
   if (input.findings.some((finding) => finding.allowlisted)) pushCode(codes, "ALLOWLIST_APPLIED");
+  if (input.findings.some((finding) => finding.baseline_matched || finding.gate_effect === "baseline")) {
+    pushCode(codes, "BASELINE_MATCHED");
+    pushCode(codes, "NEW_FINDINGS_ONLY");
+  }
   if (input.floor === "BLOCK") pushCode(codes, "POLICY_FLOOR_BLOCK");
   if (input.floor === "WARN") pushCode(codes, "POLICY_FLOOR_WARN");
   if (input.floor === "REVIEW") pushCode(codes, "POLICY_FLOOR_REVIEW");
@@ -52191,6 +52249,7 @@ function summarize(findings, errors, truncated) {
   let review = 0;
   let allowlisted = 0;
   let outOfScope = 0;
+  let baseline = 0;
   let inScope = 0;
   let highest = "none";
   const rank = {
@@ -52210,6 +52269,7 @@ function summarize(findings, errors, truncated) {
     if (finding.gate_effect === "review") review += 1;
     if (finding.gate_effect === "allowlisted") allowlisted += 1;
     if (finding.gate_effect === "out_of_scope") outOfScope += 1;
+    if (finding.gate_effect === "baseline") baseline += 1;
     if (finding.gate_effect === "blocking" || finding.gate_effect === "warning" || finding.gate_effect === "review") {
       inScope += 1;
     }
@@ -52222,6 +52282,7 @@ function summarize(findings, errors, truncated) {
     review,
     allowlisted,
     out_of_scope: outOfScope,
+    baseline,
     by_severity: bySeverity,
     by_category: byCategory,
     highest_severity: highest,
@@ -52400,7 +52461,7 @@ function buildCommentMarkdown(decision) {
     `- **Confidence:** ${decision.confidence.toFixed(3)}`,
     `- **Provisional:** ${decision.provisional ? "yes" : "no"}`,
     `- **Reason codes:** ${decision.reason_codes.map((code) => `\`${code}\``).join(", ")}`,
-    `- **Findings:** ${decision.risk_summary.total} visible, ${decision.risk_summary.blocking} blocking, ${decision.risk_summary.allowlisted} allowlisted`,
+    `- **Findings:** ${decision.risk_summary.total} visible, ${decision.risk_summary.blocking} blocking, ${decision.risk_summary.allowlisted} allowlisted, ${decision.risk_summary.baseline} baseline`,
     "",
     "| Severity | Category | Rule | Path | Gate |",
     "| --- | --- | --- | --- | --- |"
@@ -52433,6 +52494,8 @@ async function runSentinel(params) {
     environment: options.environment,
     component: options.component,
     gateScope: options.gate_scope,
+    gateMode: options.gate_mode,
+    baselineFingerprints: params.baselineFingerprints,
     changedPaths: options.changed_paths_unknown ? null : params.changedPaths
   });
   const ordered = prioritizeFindings(findings);
@@ -52492,7 +52555,7 @@ async function runSentinel(params) {
 }
 
 // src/github/outputs.ts
-var import_node_fs3 = require("node:fs");
+var import_node_fs4 = require("node:fs");
 var import_node_path3 = require("node:path");
 var OUTPUT_LIMIT = 6e4;
 var LOG_PREFIX = "[JEV Security Sentinel]";
@@ -52522,9 +52585,9 @@ function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
   );
   if (spilled && workspace) {
     const dir = (0, import_node_path3.join)(workspace, ".jev");
-    (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
+    (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
     const file = (0, import_node_path3.join)(dir, "security-sentinel-findings.json");
-    (0, import_node_fs3.writeFileSync)(file, findingsJson);
+    (0, import_node_fs4.writeFileSync)(file, findingsJson);
     writer.setOutput("findings", "");
     writer.setOutput("findings_file", file);
   } else {
@@ -52566,6 +52629,12 @@ async function main() {
     core.getInput("gate_scope") || void 0,
     config2,
     onPullRequest ? "changed" : "all"
+  );
+  const gateMode = pickEnum(
+    core.getInput("gate_mode") || void 0,
+    config2.gate_mode ?? "all",
+    GATE_MODES,
+    "gate_mode"
   );
   const lowConfidence = coalescePolicy(core.getInput("low_confidence_policy") || void 0, config2);
   const reviewMode = coalesceReviewMode(core.getInput("review_mode") || void 0, config2);
@@ -52693,6 +52762,22 @@ async function main() {
     maxFindings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
     remote
   });
+  let baselineFingerprints = /* @__PURE__ */ new Set();
+  const baselinePath = core.getInput("baseline_path") || void 0;
+  if (gateMode === "new_only") {
+    if (!baselinePath) {
+      remoteErrors.push({
+        source: "baseline",
+        message: "gate_mode=new_only requires baseline_path"
+      });
+    } else {
+      const baseline = loadBaselineFingerprints(workspace, baselinePath);
+      baselineFingerprints = baseline.fingerprints;
+      if (baseline.error) {
+        remoteErrors.push({ source: "baseline", message: baseline.error });
+      }
+    }
+  }
   core.info(formatActionMessage(`Jev provider: ${jevProvider}`));
   core.info(
     formatActionMessage(
@@ -52724,12 +52809,14 @@ async function main() {
     truncated: loaded.truncated,
     policy,
     changedPaths,
+    baselineFingerprints,
     provider,
     commentClient,
     options: {
       environment,
       component: core.getInput("component") || config2.component || "",
       gate_scope: gateScope,
+      gate_mode: gateMode,
       min_confidence: Number(core.getInput("min_confidence") || config2.min_confidence || 0.75),
       low_confidence_policy: lowConfidence,
       source_error_policy: sourceErrorPolicy,

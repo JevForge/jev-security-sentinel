@@ -27,6 +27,7 @@ The public decision is a strict object. Unknown fields are rejected. The determi
       "in_change": true,
       "allowlisted": false,
       "excluded": false,
+      "baseline_matched": false,
       "gate_effect": "blocking",
       "message": "user input reaches a query"
     }
@@ -39,6 +40,7 @@ The public decision is a strict object. Unknown fields are rejected. The determi
     "review": 0,
     "allowlisted": 0,
     "out_of_scope": 0,
+    "baseline": 0,
     "by_severity": { "critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0, "unknown": 0 },
     "by_category": { "sast": 1, "sca": 0, "iac": 0, "secrets": 0, "container": 0, "license": 0, "other": 0 },
     "highest_severity": "critical",

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   ENVIRONMENTS,
   GATE_SCOPES,
+  GATE_MODES,
   JEV_PROVIDERS,
   LOW_CONFIDENCE_POLICIES,
   REVIEW_MODES,
@@ -30,6 +31,7 @@ const FileConfigSchema = z
     environment: z.enum(ENVIRONMENTS).optional(),
     component: z.string().max(128).optional(),
     gate_scope: z.enum(GATE_SCOPES).optional(),
+    gate_mode: z.enum(GATE_MODES).optional(),
     block_secrets: z.boolean().optional(),
     escalate_known_exploited: z.boolean().optional(),
     escalate_poc: z.boolean().optional(),

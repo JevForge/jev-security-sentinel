@@ -11,7 +11,7 @@ export function buildCommentMarkdown(decision: SentinelDecision): string {
     `- **Confidence:** ${decision.confidence.toFixed(3)}`,
     `- **Provisional:** ${decision.provisional ? 'yes' : 'no'}`,
     `- **Reason codes:** ${decision.reason_codes.map(code => `\`${code}\``).join(', ')}`,
-    `- **Findings:** ${decision.risk_summary.total} visible, ${decision.risk_summary.blocking} blocking, ${decision.risk_summary.allowlisted} allowlisted`,
+    `- **Findings:** ${decision.risk_summary.total} visible, ${decision.risk_summary.blocking} blocking, ${decision.risk_summary.allowlisted} allowlisted, ${decision.risk_summary.baseline} baseline`,
     '',
     '| Severity | Category | Rule | Path | Gate |',
     '| --- | --- | --- | --- | --- |',

@@ -21,6 +21,7 @@ export interface RunSentinelParams {
   policy: GatePolicy;
   options: Partial<RunOptions>;
   changedPaths: string[] | null;
+  baselineFingerprints?: Set<string>;
   provider: JevProvider;
   commentClient?: CommentClient | null;
 }
@@ -41,6 +42,8 @@ export async function runSentinel(params: RunSentinelParams): Promise<RunSentine
     environment: options.environment,
     component: options.component,
     gateScope: options.gate_scope,
+    gateMode: options.gate_mode,
+    baselineFingerprints: params.baselineFingerprints,
     changedPaths: options.changed_paths_unknown ? null : params.changedPaths,
   });
   const ordered = prioritizeFindings(findings);

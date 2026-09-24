@@ -65,6 +65,13 @@ inputs:
   gate_scope:
     description: all | changed. On pull_request the default is changed; otherwise all.
     required: false
+  gate_mode:
+    description: all | new_only. new_only raises the floor only for findings absent from baseline_path.
+    required: false
+    default: all
+  baseline_path:
+    description: Workspace JSON of baseline fingerprints (array, {fingerprints}, or {findings}). Required when gate_mode=new_only.
+    required: false
   changed_paths:
     description: JSON array of paths in the change set. On pull_request this is loaded from the API when omitted.
     required: false
