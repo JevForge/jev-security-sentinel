@@ -32,6 +32,8 @@ const decision: SentinelDecision = {
       allowlist_reason: null,
       allowlist_expires_at: null,
       allowlist_expired: false,
+      epss: null,
+      kev: false,
       excluded: false,
       baseline_matched: false,
       gate_effect: 'blocking',

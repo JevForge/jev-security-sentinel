@@ -4,6 +4,7 @@ import { prioritizeFindings, sampleForJev } from './decision/prioritize.js';
 import { planEffects, type PlannedEffects } from './executors/effects.js';
 import { maybePostComment, type CommentClient } from './executors/comment.js';
 import { maybeCreateCheckRun, type CheckRunClient } from './executors/check-run.js';
+import type { EnrichmentMaps } from './collectors/enrichment.js';
 import type { JevProvider } from './jev/core/index.js';
 import type { RawFinding } from './collectors/common.js';
 import {
@@ -23,6 +24,7 @@ export interface RunSentinelParams {
   options: Partial<RunOptions>;
   changedPaths: string[] | null;
   baselineFingerprints?: Set<string>;
+  enrichment?: EnrichmentMaps;
   provider: JevProvider;
   commentClient?: CommentClient | null;
   checkRunClient?: CheckRunClient | null;
@@ -49,6 +51,7 @@ export async function runSentinel(params: RunSentinelParams): Promise<RunSentine
     gateMode: options.gate_mode,
     baselineFingerprints: params.baselineFingerprints,
     changedPaths: options.changed_paths_unknown ? null : params.changedPaths,
+    enrichment: params.enrichment,
   });
   const ordered = prioritizeFindings(findings);
   const sample = sampleForJev(ordered, options.max_findings_to_jev);
