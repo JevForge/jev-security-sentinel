@@ -52401,6 +52401,29 @@ function pathInChange(filePath, changed) {
     return norm === item || norm.endsWith(`/${item}`) || item.endsWith(`/${norm}`);
   });
 }
+var DEPENDENCY_SCOPE_HINTS = [
+  "package.json",
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "Cargo.toml",
+  "Cargo.lock",
+  "go.mod",
+  "go.sum",
+  "poetry.lock",
+  "Pipfile.lock",
+  "requirements.txt",
+  "composer.lock",
+  "Gemfile.lock"
+];
+function dependencyManifestChanged(changed) {
+  if (!changed) return false;
+  return changed.some((path) => {
+    const norm = path.replace(/\\/g, "/");
+    return DEPENDENCY_SCOPE_HINTS.some((hint) => norm === hint || norm.endsWith(`/${hint}`));
+  });
+}
 function isAllowlistExpired(expiresAt, now = /* @__PURE__ */ new Date()) {
   const end = Date.parse(`${expiresAt}T23:59:59.999Z`);
   if (Number.isNaN(end)) return true;
@@ -52484,7 +52507,7 @@ function annotateFindings(input) {
       policy: input.policy,
       now
     });
-    const inChange = pathInChange(raw.path, input.changedPaths);
+    const inChange = pathInChange(raw.path, input.changedPaths) || ["sca", "container", "license"].includes(raw.category) && dependencyManifestChanged(input.changedPaths);
     const outOfScope = excluded || input.gateScope === "changed" && !inChange;
     const baselineMatched = gateMode === "new_only" && baseline.has(baseId);
     let gateEffect = "informational";
