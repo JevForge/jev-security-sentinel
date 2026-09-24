@@ -179,6 +179,13 @@ async function main(): Promise<void> {
     maxFindings: Number(core.getInput('max_findings') || config.max_findings || 2000),
     remote,
   });
+  if (loaded.loadedPaths.length > 0) {
+    core.info(
+      formatActionMessage(
+        `Loaded ${loaded.loadedPaths.length} report file(s): ${loaded.loadedPaths.slice(0, 12).join(', ')}${loaded.loadedPaths.length > 12 ? ', …' : ''}`,
+      ),
+    );
+  }
 
   let baselineFingerprints = new Set<string>();
   const baselinePath = core.getInput('baseline_path') || undefined;
