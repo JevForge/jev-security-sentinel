@@ -383,6 +383,25 @@ async function main(): Promise<void> {
   core.setOutput('sarif_file', result.artifactPaths.sarifPath ?? '');
   core.setOutput('report_markdown_file', result.artifactPaths.markdownPath ?? '');
   core.setOutput('report_json_file', result.artifactPaths.jsonPath ?? '');
+  if (optionalBoolean('structured_logs', false)) {
+    core.info(
+      formatActionMessage(
+        JSON.stringify({
+          event: 'sentinel.decision',
+          decision: result.decision.decision,
+          policy_floor: result.decision.policy_floor,
+          jev_status: result.decision.jev_status,
+          findings_count: result.decision.findings.length,
+          blocking_count: result.decision.risk_summary.blocking,
+          reason_codes: result.decision.reason_codes,
+          loaded_paths: loaded.loadedPaths,
+          comment: result.commentStatus,
+          check: result.checkStatus,
+          reviewers: result.reviewerStatus,
+        }),
+      ),
+    );
+  }
   if (!dryRun) {
     for (const annotation of result.effects.annotations) {
       const payload = {
