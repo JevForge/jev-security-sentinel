@@ -14,7 +14,7 @@ import {
   type SentinelDecision,
   type SourceError,
 } from '../schemas/sentinel.js';
-import type { JevCallResult } from '../jev/types.js';
+import type { JevCallResult } from '../jev/core/index.js';
 import { sanitizeText } from '../utils/sanitize.js';
 
 export type ActionStatus = 'ok' | 'fail' | 'warn' | 'request-review' | 'no-op';

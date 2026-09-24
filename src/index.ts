@@ -5,7 +5,7 @@ import { loadFindings } from './collectors/load.js';
 import { loadBaselineFingerprints } from './collectors/baseline.js';
 import { listChangedPaths } from './collectors/github-context.js';
 import { fetchGhasAlerts, fetchSemgrepFindings, fetchSnykIssues, fetchVeracodeFindings, safeRemoteMessage } from './collectors/remote.js';
-import { createJevProvider } from './jev/factory.js';
+import { createJevProvider } from './jev/core/index.js';
 import { runSentinel } from './run.js';
 import { writeDecisionOutputs, formatActionMessage } from './github/outputs.js';
 import type { SourceError } from './schemas/sentinel.js';
