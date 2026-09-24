@@ -22,6 +22,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Run workflow on main → bump package.json if needed → push annotated tag → publish release.
+  # GITHUB_TOKEN tag pushes do not trigger the push:tags job, so prepare-tag publishes too.
   prepare-tag:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -57,6 +59,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           MOVE_MAJOR: ${{ inputs.move_major_tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -93,7 +96,20 @@ jobs:
 
           git tag -a "$TAG" -m "Release ${TAG}"
           git push origin "$TAG"
-          echo "Pushed $TAG — the tag workflow will publish the GitHub Release."
+
+          # GITHUB_TOKEN tag pushes do not trigger the push:tags workflow — publish here.
+          {
+            echo "Release ${TAG} of JEV Security Sentinel."
+            echo
+            echo "Pin consumers to \`@${TAG}\` or the floating major (for example \`@v0\`)."
+            echo
+            echo "Marketplace listing updates still require checking **Publish this Action to the GitHub Marketplace** in the browser (GitHub 2FA cannot run in CI)."
+          } > /tmp/notes.md
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/notes.md \
+            --generate-notes
+          echo "Published GitHub Release ${TAG}"
 
           if [ "$MOVE_MAJOR" = "true" ]; then
             MAJOR="v$(echo "$VERSION" | cut -d. -f1)"
@@ -140,7 +156,7 @@ jobs:
             echo
             echo "Pin consumers to \`@${TAG}\` or the floating major (for example \`@v0\`)."
             echo
-            echo "Marketplace listing still requires checking **Publish this Action to the GitHub Marketplace** in the browser (GitHub 2FA cannot run in CI)."
+            echo "Marketplace listing updates still require checking **Publish this Action to the GitHub Marketplace** in the browser (GitHub 2FA cannot run in CI)."
           } > /tmp/notes.md
           gh release create "$TAG" \
             --title "$TAG" \

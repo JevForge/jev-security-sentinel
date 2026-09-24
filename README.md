@@ -10,7 +10,7 @@ Scanner tools produce long lists. Teams need a clear merge gate without burying 
 
 ```yaml
 - id: sentinel
-  uses: JevForge/jev-security-sentinel@v0.1.0
+  uses: JevForge/jev-security-sentinel@v0.1.1
   env:
     AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
   with:
@@ -19,7 +19,7 @@ Scanner tools produce long lists. Teams need a clear merge gate without burying 
     gate_scope: changed
 ```
 
-Pin `@v0.1.0`, the floating major `@v0`, or a commit SHA.
+Pin `@v0.1.1`, the floating major `@v0`, or a commit SHA.
 
 ## Features
 
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: sentinel
-        uses: JevForge/jev-security-sentinel@v0.1.0
+        uses: JevForge/jev-security-sentinel@v0.1.1
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
         with:
@@ -149,7 +149,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: sentinel
-        uses: JevForge/jev-security-sentinel@v0.1.0
+        uses: JevForge/jev-security-sentinel@v0.1.1
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
         with:
@@ -339,7 +339,7 @@ See [SECURITY.md](SECURITY.md).
 
 ```yaml
 uses: JevForge/jev-security-sentinel@v0      # floating major
-uses: JevForge/jev-security-sentinel@v0.1.0 # exact release
+uses: JevForge/jev-security-sentinel@v0.1.1 # exact release
 ```
 
 Prefer an exact tag or commit SHA for production workflows.

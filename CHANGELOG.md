@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-24
+
 ### Changed
 
-* Expanded public README, examples, issue/PR templates, and contributor docs for Marketplace readiness.
+* Aligned the Release workflow with JEV Model Navigator (publish from `workflow_dispatch` because `GITHUB_TOKEN` tag pushes do not re-trigger workflows).
+* Expanded public README, examples, and GitHub templates for Marketplace readiness.
 * Prefixed user-facing Action logs and failures with `[JEV Security Sentinel]`.
 
 ## [0.1.0] - 2026-09-24
