@@ -91,6 +91,7 @@ jobs:
           if ! git diff --quiet -- package.json; then
             git add package.json
             git commit -m "chore: release ${TAG}"
+            git pull --rebase origin main
             git push origin HEAD:main
           fi
 
