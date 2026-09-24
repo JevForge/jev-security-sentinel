@@ -4,7 +4,7 @@ import { prioritizeFindings, sampleForJev } from './decision/prioritize.js';
 import { planEffects, type PlannedEffects } from './executors/effects.js';
 import { maybePostComment, type CommentClient } from './executors/comment.js';
 import { maybeCreateCheckRun, type CheckRunClient } from './executors/check-run.js';
-import type { JevProvider } from './jev/types.js';
+import type { JevProvider } from './jev/core/index.js';
 import type { RawFinding } from './collectors/common.js';
 import {
   RunOptionsSchema,
