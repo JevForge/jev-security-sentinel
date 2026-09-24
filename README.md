@@ -28,6 +28,7 @@ Pin `@v0.1.1`, the floating major `@v0`, or a commit SHA.
 * Deterministic policy floor: Jev may escalate, never hide or weaken the floor
 * Every finding stays in outputs (allowlist changes gate effect only)
 * Native parsers for SARIF, Semgrep, Trivy, Snyk, Veracode, plus optional GitHub Advanced Security / remote APIs
+* Multi-file report inputs: comma/newline lists or globs (`reports/**/*.sarif`)
 * Structured outputs for later steps (`decision`, `risk_summary`, `findings`, …)
 * Secret-based auth; credentials never go through Action inputs
 * Configurable failure modes: `fail` | `warn` | `request-review` | `no-op`

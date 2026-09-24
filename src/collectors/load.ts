@@ -11,6 +11,7 @@ import {
   parseTrivy,
   parseVeracode,
 } from './parsers.js';
+import { resolveReportPathInput } from '../utils/report-paths.js';
 import { resolveInsideWorkspace } from '../utils/workspace-path.js';
 import type { SourceError } from '../schemas/sentinel.js';
 
@@ -19,6 +20,7 @@ const MAX_BYTES = 20_000_000;
 export interface LoadRequest {
   workspace: string;
   normalizedJson?: string;
+  /** Single path, comma/newline list, or glob(s). */
   normalizedPath?: string;
   sarifPath?: string;
   semgrepPath?: string;
@@ -40,6 +42,8 @@ export interface LoadResult {
   findings: RawFinding[];
   errors: SourceError[];
   truncated: boolean;
+  /** Workspace-relative report files that were successfully opened. */
+  loadedPaths: string[];
 }
 
 function readJson(workspace: string, userPath: string, source: string, errors: SourceError[]): unknown | undefined {
@@ -77,9 +81,36 @@ function take(
   }
 }
 
+function loadPathGroup(
+  workspace: string,
+  raw: string | undefined,
+  source: string,
+  parser: (data: unknown) => RawFinding[],
+  bucket: RawFinding[],
+  errors: SourceError[],
+  loadedPaths: string[],
+): void {
+  if (!raw?.trim()) return;
+  const resolved = resolveReportPathInput(workspace, raw);
+  for (const message of resolved.errors) {
+    errors.push({ source, message });
+  }
+  if (resolved.paths.length === 0 && resolved.errors.length === 0) {
+    errors.push({ source, message: `No files matched: ${raw.trim().slice(0, 120)}` });
+    return;
+  }
+  for (const path of resolved.paths) {
+    const data = readJson(workspace, path, source, errors);
+    if (data === undefined) continue;
+    take(source, parser, data, bucket, errors);
+    loadedPaths.push(path);
+  }
+}
+
 export function loadFindings(request: LoadRequest): LoadResult {
   const errors: SourceError[] = [];
   const bucket: RawFinding[] = [];
+  const loadedPaths: string[] = [];
 
   if (request.normalizedJson?.trim()) {
     try {
@@ -88,30 +119,21 @@ export function loadFindings(request: LoadRequest): LoadResult {
       errors.push({ source: 'normalized', message: 'findings JSON input is not valid JSON' });
     }
   }
-  if (request.normalizedPath) {
-    const data = readJson(request.workspace, request.normalizedPath, 'normalized', errors);
-    if (data !== undefined) take('normalized', parseNormalized, data, bucket, errors);
-  }
-  if (request.sarifPath) {
-    const data = readJson(request.workspace, request.sarifPath, 'sarif', errors);
-    if (data !== undefined) take('sarif', parseSarif, data, bucket, errors);
-  }
-  if (request.semgrepPath) {
-    const data = readJson(request.workspace, request.semgrepPath, 'semgrep', errors);
-    if (data !== undefined) take('semgrep', parseSemgrep, data, bucket, errors);
-  }
-  if (request.trivyPath) {
-    const data = readJson(request.workspace, request.trivyPath, 'trivy', errors);
-    if (data !== undefined) take('trivy', parseTrivy, data, bucket, errors);
-  }
-  if (request.snykPath) {
-    const data = readJson(request.workspace, request.snykPath, 'snyk', errors);
-    if (data !== undefined) take('snyk', parseSnyk, data, bucket, errors);
-  }
-  if (request.veracodePath) {
-    const data = readJson(request.workspace, request.veracodePath, 'veracode', errors);
-    if (data !== undefined) take('veracode', parseVeracode, data, bucket, errors);
-  }
+
+  loadPathGroup(
+    request.workspace,
+    request.normalizedPath,
+    'normalized',
+    parseNormalized,
+    bucket,
+    errors,
+    loadedPaths,
+  );
+  loadPathGroup(request.workspace, request.sarifPath, 'sarif', parseSarif, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.semgrepPath, 'semgrep', parseSemgrep, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.trivyPath, 'trivy', parseTrivy, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.snykPath, 'snyk', parseSnyk, bucket, errors, loadedPaths);
+  loadPathGroup(request.workspace, request.veracodePath, 'veracode', parseVeracode, bucket, errors, loadedPaths);
 
   const remote = request.remote;
   if (remote?.semgrep !== undefined) take('semgrep', parseSemgrep, remote.semgrep, bucket, errors);
@@ -132,5 +154,6 @@ export function loadFindings(request: LoadRequest): LoadResult {
     findings: truncated ? bucket.slice(0, request.maxFindings) : bucket,
     errors,
     truncated,
+    loadedPaths,
   };
 }

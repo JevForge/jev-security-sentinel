@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
+### Added
+
+* Report path inputs (`findings_path`, `sarif_path`, `semgrep_path`, `trivy_path`, `snyk_path`, `veracode_path`) accept comma/newline lists and workspace globs.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added
