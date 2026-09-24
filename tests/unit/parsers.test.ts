@@ -9,6 +9,9 @@ import {
   parseSnyk,
   parseTrivy,
   parseVeracode,
+  parseOsv,
+  parseGrype,
+  parseCheckov,
 } from '../../src/collectors/parsers.js';
 import { loadFindings } from '../../src/collectors/load.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -178,6 +181,21 @@ describe('scanner normalizers', () => {
     expect(parseCodeScanning([{ state: 'dismissed', rule: { id: 'r', severity: 'warning' } }])[0]?.scanner_suppressed).toBe(true);
     expect(parseSecretScanning([{ state: 'resolved', secret_type: 'aws' }])[0]?.scanner_suppressed).toBe(true);
     expect(parseDependabot([{ state: 'dismissed' }])[0]?.scanner_suppressed).toBe(true);
+    expect(parseOsv({
+      results: [{
+        source: { path: 'go.mod' },
+        packages: [{
+          package: { name: 'github.com/foo/bar' },
+          vulnerabilities: [{ id: 'OSV-1', aliases: ['CVE-2024-1'], summary: 'bug', severity: [{ score: '9.1' }] }],
+        }],
+      }],
+    })[0]).toMatchObject({ source: 'osv', category: 'sca', cve: 'CVE-2024-1' });
+    expect(parseGrype({
+      matches: [{ vulnerability: { id: 'CVE-2024-2', severity: 'High', description: 'x' }, artifact: { name: 'openssl' } }],
+    })[0]).toMatchObject({ source: 'grype', component: 'openssl' });
+    expect(parseCheckov({
+      results: { failed_checks: [{ check_id: 'CKV_1', check_name: 'root', severity: 'HIGH', file_path: 'Dockerfile', file_line_range: [1] }] },
+    })[0]).toMatchObject({ source: 'checkov', category: 'iac', path: 'Dockerfile' });
     expect(parseNormalized([{ severity: 'critical', category: 'secrets', exploitability: 'unlikely', title: 'tok', rule_id: 'S' }])[0]?.message).toBe('');
     expect(() => parseSemgrep({})).toThrow(/results/);
     expect(() => parseSnyk({})).toThrow(/vulnerabilities/);

@@ -27,6 +27,15 @@ inputs:
   veracode_path:
     description: Workspace path(s) to Veracode findings JSON. Comma/newline list or glob.
     required: false
+  osv_path:
+    description: Workspace path(s) to OSV scanner JSON. Comma/newline list or glob.
+    required: false
+  grype_path:
+    description: Workspace path(s) to Grype JSON. Comma/newline list or glob.
+    required: false
+  checkov_path:
+    description: Workspace path(s) to Checkov JSON. Comma/newline list or glob.
+    required: false
   fetch_ghas:
     description: Fetch open GitHub code scanning, secret scanning, and Dependabot alerts.
     required: false
