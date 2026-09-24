@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-24
+
+### Added
+
+* Auditable allowlist `entries` with required `owner`, `reason`, and `expires_at` (YYYY-MM-DD).
+* Expired entries leave findings in-scope (`ALLOWLIST_EXPIRED`); legacy array allowlists emit `ALLOWLIST_UNAUDITED`.
+
 ## [0.4.0] - 2026-09-24
 
 ### Added
