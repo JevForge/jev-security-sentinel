@@ -52958,4 +52958,3 @@ main().catch((error2) => {
   const message = error2 instanceof Error ? error2.message : String(error2);
   core.setFailed(formatActionMessage(message));
 });
-//# sourceMappingURL=index.js.map
