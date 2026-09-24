@@ -17,7 +17,8 @@ import {
   type ReviewMode,
   type SourceErrorPolicy,
 } from '../schemas/enums.js';
-import { AllowlistSchema, resolvePolicy, type GatePolicy } from '../schemas/sentinel.js';
+import { AllowlistSchema, type GatePolicy } from '../schemas/sentinel.js';
+import { POLICY_PACKS, resolvePolicyPack, type PolicyPack } from '../decision/packs.js';
 
 const FileConfigSchema = z
   .object({
@@ -32,6 +33,7 @@ const FileConfigSchema = z
     component: z.string().max(128).optional(),
     gate_scope: z.enum(GATE_SCOPES).optional(),
     gate_mode: z.enum(GATE_MODES).optional(),
+    policy_pack: z.enum(POLICY_PACKS).optional(),
     block_secrets: z.boolean().optional(),
     escalate_known_exploited: z.boolean().optional(),
     escalate_poc: z.boolean().optional(),
@@ -55,8 +57,9 @@ export function loadFileConfig(workspace: string, relativePath = '.jev/config.ym
   return FileConfigSchema.parse(raw);
 }
 
-export function policyFromConfig(config: FileConfig): GatePolicy {
-  return resolvePolicy({
+export function policyFromConfig(config: FileConfig, packOverride?: PolicyPack): GatePolicy {
+  const pack = packOverride ?? config.policy_pack ?? 'default';
+  return resolvePolicyPack(pack, {
     id: config.policy_id,
     block_secrets: config.block_secrets,
     escalate_known_exploited: config.escalate_known_exploited,

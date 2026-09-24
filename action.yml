@@ -72,6 +72,10 @@ inputs:
   baseline_path:
     description: Workspace JSON of baseline fingerprints (array, {fingerprints}, or {findings}). Required when gate_mode=new_only.
     required: false
+  policy_pack:
+    description: default | strict-prod | startup | compliance. Sets severity floors; config overrides still apply.
+    required: false
+    default: default
   changed_paths:
     description: JSON array of paths in the change set. On pull_request this is loaded from the API when omitted.
     required: false

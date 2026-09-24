@@ -36357,6 +36357,79 @@ function emptySeverityCounts() {
   return { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0 };
 }
 
+// src/decision/packs.ts
+var POLICY_PACKS = ["default", "strict-prod", "startup", "compliance"];
+var closed2 = (block, review = [], warn = []) => ({
+  block,
+  review,
+  warn
+});
+var PACKS = {
+  default: {},
+  "strict-prod": {
+    id: "pack:strict-prod",
+    block_secrets: true,
+    escalate_known_exploited: true,
+    escalate_poc: true,
+    environments: {
+      production: closed2(["critical", "high", "medium"], ["unknown", "low"], []),
+      staging: closed2(["critical", "high", "medium"], ["unknown"], ["low"]),
+      development: closed2(["critical", "high"], ["medium", "unknown"], ["low"]),
+      test: closed2(["critical", "high"], ["unknown"], ["medium"]),
+      unknown: closed2(["critical", "high", "medium"], ["unknown"], [])
+    }
+  },
+  startup: {
+    id: "pack:startup",
+    block_secrets: true,
+    escalate_known_exploited: true,
+    escalate_poc: false,
+    environments: {
+      production: closed2(["critical"], ["high", "unknown"], ["medium"]),
+      staging: closed2(["critical"], ["high", "unknown"], ["medium"]),
+      development: closed2(["critical"], ["unknown"], ["high", "medium"]),
+      test: closed2([], ["critical", "unknown"], ["high", "medium"]),
+      unknown: closed2(["critical"], ["high", "unknown"], ["medium"])
+    }
+  },
+  compliance: {
+    id: "pack:compliance",
+    block_secrets: true,
+    escalate_known_exploited: true,
+    escalate_poc: true,
+    environments: {
+      production: closed2(["critical", "high"], ["medium", "unknown"], ["low"]),
+      staging: closed2(["critical", "high"], ["medium", "unknown"], ["low"]),
+      development: closed2(["critical", "high"], ["medium", "unknown"], []),
+      test: closed2(["critical", "high"], ["medium", "unknown"], []),
+      unknown: closed2(["critical", "high"], ["medium", "unknown"], ["low"])
+    }
+  }
+};
+function resolvePolicyPack(pack, overrides) {
+  const base = PACKS[pack ?? "default"] ?? {};
+  const merged = resolvePolicy({
+    ...base,
+    ...withoutUndefined2(overrides ?? {}),
+    id: overrides?.id ?? base.id ?? DEFAULT_POLICY.id,
+    environments: {
+      ...DEFAULT_POLICY.environments,
+      ...base.environments ?? {},
+      ...overrides?.environments ?? {}
+    },
+    allowlist: {
+      ...DEFAULT_POLICY.allowlist,
+      ...base.allowlist ?? {},
+      ...overrides?.allowlist ?? {}
+    },
+    exclude_paths: overrides?.exclude_paths ?? base.exclude_paths ?? DEFAULT_POLICY.exclude_paths
+  });
+  return merged;
+}
+function withoutUndefined2(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== void 0));
+}
+
 // src/collectors/config.ts
 var FileConfigSchema = external_exports.object({
   jev_provider: external_exports.enum(JEV_PROVIDERS).optional(),
@@ -36370,6 +36443,7 @@ var FileConfigSchema = external_exports.object({
   component: external_exports.string().max(128).optional(),
   gate_scope: external_exports.enum(GATE_SCOPES).optional(),
   gate_mode: external_exports.enum(GATE_MODES).optional(),
+  policy_pack: external_exports.enum(POLICY_PACKS).optional(),
   block_secrets: external_exports.boolean().optional(),
   escalate_known_exploited: external_exports.boolean().optional(),
   escalate_poc: external_exports.boolean().optional(),
@@ -36388,8 +36462,9 @@ function loadFileConfig(workspace, relativePath = ".jev/config.yml") {
   const raw = import_yaml.default.parse((0, import_node_fs.readFileSync)(full, "utf8")) ?? {};
   return FileConfigSchema.parse(raw);
 }
-function policyFromConfig(config2) {
-  return resolvePolicy({
+function policyFromConfig(config2, packOverride) {
+  const pack = packOverride ?? config2.policy_pack ?? "default";
+  return resolvePolicyPack(pack, {
     id: config2.policy_id,
     block_secrets: config2.block_secrets,
     escalate_known_exploited: config2.escalate_known_exploited,
@@ -52994,7 +53069,10 @@ async function main() {
   const lowConfidence = coalescePolicy(core.getInput("low_confidence_policy") || void 0, config2);
   const reviewMode = coalesceReviewMode(core.getInput("review_mode") || void 0, config2);
   const sourceErrorPolicy = coalesceSourceErrors(core.getInput("source_error_policy") || void 0, config2);
-  const policy = policyFromConfig(config2);
+  const policy = policyFromConfig(
+    config2,
+    pickEnum(core.getInput("policy_pack") || void 0, config2.policy_pack ?? "default", POLICY_PACKS, "policy_pack")
+  );
   const timeoutMs = Number(core.getInput("timeout_ms") || 45e3);
   const dryRun = optionalBoolean("dry_run", false);
   const comment = optionalBoolean("comment_on_github", config2.comment_on_github ?? false);
