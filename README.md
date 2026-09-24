@@ -176,12 +176,12 @@ More workflows: [`examples/gate.yml`](examples/gate.yml), [`examples/pr-gate.yml
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `findings` | no | — | Inline normalized findings JSON |
-| `findings_path` | no | — | Workspace path to normalized findings JSON |
-| `sarif_path` | no | — | SARIF 2.1.0 report path |
-| `semgrep_path` | no | — | Semgrep JSON path |
-| `trivy_path` | no | — | Trivy JSON path |
-| `snyk_path` | no | — | Snyk CLI or REST JSON path |
-| `veracode_path` | no | — | Veracode findings JSON path |
+| `findings_path` | no | — | Path(s) or glob to normalized findings JSON |
+| `sarif_path` | no | — | Path(s) or glob to SARIF 2.1.0 (`reports/**/*.sarif`) |
+| `semgrep_path` | no | — | Path(s) or glob to Semgrep JSON |
+| `trivy_path` | no | — | Path(s) or glob to Trivy JSON |
+| `snyk_path` | no | — | Path(s) or glob to Snyk CLI or REST JSON |
+| `veracode_path` | no | — | Path(s) or glob to Veracode findings JSON |
 | `fetch_ghas` | no | `false` | Fetch open code scanning, secret scanning, and Dependabot alerts |
 | `fetch_snyk` | no | `false` | Fetch Snyk REST issues (`SNYK_TOKEN` + `snyk_org_id`) |
 | `snyk_org_id` | no | — | Snyk organization id |
