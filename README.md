@@ -29,6 +29,7 @@ Pin `@v0.1.1`, the floating major `@v0`, or a commit SHA.
 * Every finding stays in outputs (allowlist changes gate effect only)
 * Native parsers for SARIF, Semgrep, Trivy, Snyk, Veracode, plus optional GitHub Advanced Security / remote APIs
 * Multi-file report inputs: comma/newline lists or globs (`reports/**/*.sarif`)
+* Native Checks API run plus idempotent PR comments
 * Structured outputs for later steps (`decision`, `risk_summary`, `findings`, …)
 * Secret-based auth; credentials never go through Action inputs
 * Configurable failure modes: `fail` | `warn` | `request-review` | `no-op`
@@ -206,10 +207,11 @@ More workflows: [`examples/gate.yml`](examples/gate.yml), [`examples/pr-gate.yml
 | `timeout_ms` | no | `45000` | Remote call timeout |
 | `max_findings` | no | `2000` | Max preserved findings (overflow → at least `REVIEW`) |
 | `max_findings_to_jev` | no | `40` | Sample size sent to Jev (policy still sees all) |
-| `comment_on_github` | no | `false` | Post a PR/issue summary comment |
+| `comment_on_github` | no | `false` | Post or update an idempotent PR/issue summary comment |
+| `create_check_run` | no | `true` | Create a completed Checks API run |
 | `annotate` | no | `true` | Emit workflow annotations for in-scope findings |
-| `dry_run` | no | `false` | Skip comments and annotations |
-| `github_token` | no | `${{ github.token }}` | Token for PR files, comments, optional GHAS |
+| `dry_run` | no | `false` | Skip comments, check runs, and annotations |
+| `github_token` | no | `${{ github.token }}` | Token for PR files, comments, checks, optional GHAS |
 
 Paths must stay inside `GITHUB_WORKSPACE`. Reports larger than 20MB are rejected as source errors. Scanner credentials belong in `env`, not in `with:`.
 
@@ -232,6 +234,7 @@ Paths must stay inside `GITHUB_WORKSPACE`. Reports larger than 20MB are rejected
 | `policy_id` | Policy identifier |
 | `blocking_count` | Findings with `gate_effect: blocking` |
 | `summary` | One-line decision summary |
+| `check_status` | `created` \| `dry-run` \| `skipped` |
 
 ### Using outputs in conditions
 
@@ -277,11 +280,13 @@ Minimum for local reports + PR file scope:
 permissions:
   contents: read
   pull-requests: read
+  checks: write
 ```
 
 | Extra permission | When |
 | --- | --- |
 | `pull-requests: write` | `comment_on_github: true` |
+| `checks: write` | `create_check_run: true` (default) |
 | `security-events: read` | `fetch_ghas: true` |
 
 ## Decision model

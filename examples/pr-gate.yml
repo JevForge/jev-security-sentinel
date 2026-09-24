@@ -5,6 +5,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  checks: write
 
 jobs:
   gate:
@@ -16,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: sentinel
-        uses: JevForge/jev-security-sentinel@v0.1.1
+        uses: JevForge/jev-security-sentinel@v0
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
         with:
@@ -25,6 +26,7 @@ jobs:
           environment: production
           gate_scope: changed
           comment_on_github: 'true'
+          create_check_run: 'true'
           annotate: 'true'
           review_mode: fail
 

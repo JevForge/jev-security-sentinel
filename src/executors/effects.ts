@@ -10,6 +10,7 @@ export const ALLOWED_EFFECTS = [
   'no-op',
   'pull-request-comment',
   'file-annotation',
+  'check-run',
 ] as const;
 
 export type AllowedEffect = (typeof ALLOWED_EFFECTS)[number];
@@ -40,6 +41,7 @@ export function planEffects(input: {
   actionStatus: ActionStatus;
   annotate: boolean;
   comment: boolean;
+  checkRun: boolean;
 }): PlannedEffects {
   const effects: AllowedEffect[] = ['set-outputs'];
   if (input.actionStatus === 'fail') effects.push('fail-step');
@@ -47,6 +49,7 @@ export function planEffects(input: {
   else if (input.actionStatus === 'request-review') effects.push('request-review');
   else if (input.actionStatus === 'no-op') effects.push('no-op');
   if (input.comment) effects.push('pull-request-comment');
+  if (input.checkRun) effects.push('check-run');
 
   const annotations: AnnotationRequest[] = [];
   if (input.annotate) {

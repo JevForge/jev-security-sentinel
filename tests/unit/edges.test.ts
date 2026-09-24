@@ -263,7 +263,11 @@ describe('edges', () => {
       truncated: false,
       changedPathsUnknown: false,
     }).decision;
-    expect(await maybePostComment(true, true, decision, { async createComment() {} })).toBe('dry-run');
+    expect(await maybePostComment(true, true, decision, {
+      async listComments() { return []; },
+      async createComment() {},
+      async updateComment() {},
+    })).toBe('dry-run');
     expect(await maybePostComment(false, false, decision, null)).toBe('skipped');
     const failed: string[] = [];
     writeDecisionOutputs({

@@ -2,11 +2,22 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-24
+
+### Added
+
+* Optional Checks API run (`create_check_run`, default `true`) with decision summary and top findings.
+* Idempotent PR/issue comments: re-runs update the existing `<!-- jev-security-sentinel -->` comment.
+
 ## [0.3.0] - 2026-09-24
 
 ### Added
 
 * Report path inputs (`findings_path`, `sarif_path`, `semgrep_path`, `trivy_path`, `snyk_path`, `veracode_path`) accept comma/newline lists and workspace globs.
+
+### Fixed
+
+* Disabled esbuild sourcemaps so Linux release `verify-dist` matches committed `dist`.
 
 ## [0.2.0] - 2026-09-24
 

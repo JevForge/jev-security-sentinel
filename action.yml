@@ -114,19 +114,23 @@ inputs:
     required: false
     default: '40'
   comment_on_github:
-    description: Post a summary comment on the pull request or issue.
+    description: Post or update a summary comment on the pull request or issue (idempotent).
     required: false
     default: 'false'
+  create_check_run:
+    description: Create a completed Checks API run named JEV Security Sentinel.
+    required: false
+    default: 'true'
   annotate:
     description: Emit workflow annotations for in-scope findings.
     required: false
     default: 'true'
   dry_run:
-    description: Skip comments and annotations.
+    description: Skip comments, check runs, and annotations.
     required: false
     default: 'false'
   github_token:
-    description: Token for pull request files, comments, and optional GitHub Advanced Security reads.
+    description: Token for PR files, comments, check runs, and optional GitHub Advanced Security reads.
     required: false
     default: ${{ github.token }}
 
@@ -161,6 +165,8 @@ outputs:
     description: Findings whose gate effect is blocking.
   summary:
     description: One-line decision summary.
+  check_status:
+    description: created | dry-run | skipped for the Checks API run.
 
 runs:
   using: node24

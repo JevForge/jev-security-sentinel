@@ -64,11 +64,28 @@ describe('runSentinel', () => {
       policy: DEFAULT_POLICY,
       changedPaths: ['src/app.js', 'package.json'],
       provider,
-      commentClient: { async createComment(body) { comments.push(body); } },
+      commentClient: {
+        async listComments() {
+          return [];
+        },
+        async createComment(body) {
+          comments.push(body);
+        },
+        async updateComment() {
+          /* unused */
+        },
+      },
+      checkRunClient: {
+        async createCheckRun() {
+          /* unused in this assertion */
+        },
+      },
+      headSha: 'deadbeef',
       options: {
         environment: 'production',
         gate_scope: 'changed',
         comment_on_github: true,
+        create_check_run: true,
         dry_run: false,
         min_confidence: 0.75,
         low_confidence_policy: 'fail',
@@ -78,9 +95,12 @@ describe('runSentinel', () => {
     expect(result.decision.decision).toBe('BLOCK');
     expect(result.decision.jev_proposed).toBe('PASS');
     expect(result.commentStatus).toBe('posted');
+    expect(result.checkStatus).toBe('created');
     expect(comments[0]).toContain('JEV Security Sentinel');
+    expect(comments[0]).toContain('<!-- jev-security-sentinel -->');
     expect(result.effects.fail).toBe(true);
     expect(result.effects.effects).toContain('pull-request-comment');
+    expect(result.effects.effects).toContain('check-run');
     expect(result.effects.effects).not.toContain('delete-repository');
   });
 
