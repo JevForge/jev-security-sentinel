@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-24
+
+### Added
+
+* SCA/container/license findings count as in-change when dependency lock/manifest files change.
+
+
 ## [0.10.0] - 2026-09-24
 
 ### Added
@@ -81,6 +88,7 @@
 * Initial JEV Security Sentinel gate for normalized findings, SARIF, Semgrep, Trivy, Snyk, Veracode, and GitHub Advanced Security.
 * Configurable Jev providers: `vercel-ai-gateway`, `typesafe-native`, and `custom-compatible`.
 * Deterministic floor that can only make PASS, WARN, BLOCK, or REVIEW stricter, while preserving every finding.
+
 
 
 
