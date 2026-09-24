@@ -209,6 +209,7 @@ More workflows: [`examples/gate.yml`](examples/gate.yml), [`examples/pr-gate.yml
 | `max_findings_to_jev` | no | `40` | Sample size sent to Jev (policy still sees all) |
 | `comment_on_github` | no | `false` | Post or update an idempotent PR/issue summary comment |
 | `create_check_run` | no | `true` | Create a completed Checks API run |
+| `enrich_epss_kev` | no | `false` | Enrich CVEs with CISA KEV + FIRST EPSS (network) |
 | `annotate` | no | `true` | Emit workflow annotations for in-scope findings |
 | `dry_run` | no | `false` | Skip comments, check runs, and annotations |
 | `github_token` | no | `${{ github.token }}` | Token for PR files, comments, checks, optional GHAS |

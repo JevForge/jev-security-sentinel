@@ -36095,7 +36095,9 @@ var REASON_CODES = [
   "CHANGED_PATHS_UNKNOWN",
   "BLOCK_SECRETS",
   "BASELINE_MATCHED",
-  "NEW_FINDINGS_ONLY"
+  "NEW_FINDINGS_ONLY",
+  "KEV_MATCHED",
+  "EPSS_ENRICHED"
 ];
 var DECISION_RANK = {
   PASS: 0,
@@ -36134,6 +36136,8 @@ var FindingSchema = external_exports.object({
   allowlist_reason: external_exports.string().max(500).nullable().default(null),
   allowlist_expires_at: external_exports.string().max(32).nullable().default(null),
   allowlist_expired: external_exports.boolean().default(false),
+  epss: external_exports.number().min(0).max(1).nullable().default(null),
+  kev: external_exports.boolean().default(false),
   excluded: external_exports.boolean(),
   baseline_matched: external_exports.boolean().default(false),
   gate_effect: external_exports.enum(GATE_EFFECTS),
@@ -36343,6 +36347,7 @@ var RunOptionsSchema = external_exports.object({
   dry_run: external_exports.boolean().default(false),
   comment_on_github: external_exports.boolean().default(false),
   create_check_run: external_exports.boolean().default(true),
+  enrich_epss_kev: external_exports.boolean().default(false),
   annotate: external_exports.boolean().default(true),
   max_findings: external_exports.number().int().positive().max(5e3).default(2e3),
   max_findings_to_jev: external_exports.number().int().positive().max(100).default(40),
@@ -37146,6 +37151,94 @@ function loadBaselineFingerprints(workspace, relativePath) {
     const message = error2 instanceof Error ? error2.message : String(error2);
     return { fingerprints: /* @__PURE__ */ new Set(), error: message.slice(0, 180) };
   }
+}
+
+// src/collectors/enrichment.ts
+var KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
+var EPSS_URL = "https://api.first.org/data/v1/epss";
+async function defaultFetchJson(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: "application/json", "User-Agent": "jev-security-sentinel" }
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function normalizeCve(value) {
+  return value.trim().toUpperCase();
+}
+function parseKevCatalog(data) {
+  const kev = /* @__PURE__ */ new Set();
+  const root = data && typeof data === "object" ? data : null;
+  const vulnerabilities = Array.isArray(root?.vulnerabilities) ? root.vulnerabilities : [];
+  for (const item of vulnerabilities) {
+    if (!item || typeof item !== "object") continue;
+    const cve = item.cveID;
+    if (typeof cve === "string" && cve.trim()) kev.add(normalizeCve(cve));
+  }
+  return kev;
+}
+function parseEpssResponse(data) {
+  const scores = /* @__PURE__ */ new Map();
+  const root = data && typeof data === "object" ? data : null;
+  const rows = Array.isArray(root?.data) ? root.data : [];
+  for (const item of rows) {
+    if (!item || typeof item !== "object") continue;
+    const row = item;
+    const cve = typeof row.cve === "string" ? normalizeCve(row.cve) : "";
+    const epss = typeof row.epss === "string" || typeof row.epss === "number" ? Number(row.epss) : NaN;
+    if (cve && Number.isFinite(epss) && epss >= 0 && epss <= 1) scores.set(cve, epss);
+  }
+  return scores;
+}
+function chunkCves(cves, size = 40) {
+  const unique = [...new Set(cves.map(normalizeCve).filter(Boolean))];
+  const batches = [];
+  for (let i = 0; i < unique.length; i += size) batches.push(unique.slice(i, i + size));
+  return batches;
+}
+async function loadEnrichmentMaps(input) {
+  const errors = [];
+  const client = input.client ?? { fetchJson: defaultFetchJson };
+  const maps = { kev: /* @__PURE__ */ new Set(), epss: /* @__PURE__ */ new Map() };
+  const cves = [...new Set(input.cves.map(normalizeCve).filter(Boolean))];
+  if (cves.length === 0) return { maps, errors };
+  try {
+    maps.kev = parseKevCatalog(await client.fetchJson(KEV_URL, input.timeoutMs));
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : String(error2);
+    errors.push({ source: "cisa-kev", message: message.slice(0, 180) });
+  }
+  for (const batch of chunkCves(cves)) {
+    const url = `${EPSS_URL}?cve=${batch.map(encodeURIComponent).join(",")}`;
+    try {
+      const parsed = parseEpssResponse(await client.fetchJson(url, input.timeoutMs));
+      for (const [cve, score] of parsed) maps.epss.set(cve, score);
+    } catch (error2) {
+      const message = error2 instanceof Error ? error2.message : String(error2);
+      errors.push({ source: "epss", message: message.slice(0, 180) });
+      break;
+    }
+  }
+  return { maps, errors };
+}
+function applyEnrichment(cve, exploitability, maps) {
+  if (!cve) return { exploitability, epss: null, kev: false };
+  const key = normalizeCve(cve);
+  const kev = maps.kev.has(key);
+  const epss = maps.epss.get(key) ?? null;
+  let next = exploitability;
+  if (kev) next = "known_exploited";
+  else if (epss !== null && epss >= 0.5 && exploitability === "unknown") next = "likely";
+  return { exploitability: next, epss, kev };
 }
 
 // src/collectors/github-context.ts
@@ -52289,10 +52382,12 @@ function resolveAllowlist(input) {
 function annotateFindings(input) {
   const gateMode = input.gateMode ?? "all";
   const baseline = input.baselineFingerprints ?? /* @__PURE__ */ new Set();
+  const enrichment = input.enrichment ?? { kev: /* @__PURE__ */ new Set(), epss: /* @__PURE__ */ new Map() };
   const now = input.now ?? /* @__PURE__ */ new Date();
   const seen = /* @__PURE__ */ new Map();
   return input.raw.map((raw) => {
-    const exploitability = raw.category === "secrets" && raw.exploitability === "unknown" ? "likely" : raw.exploitability;
+    const enriched = applyEnrichment(raw.cve, raw.exploitability, enrichment);
+    const exploitability = raw.category === "secrets" && enriched.exploitability === "unknown" ? "likely" : enriched.exploitability;
     const baseId = fingerprint([
       raw.source,
       raw.rule_id,
@@ -52348,6 +52443,8 @@ function annotateFindings(input) {
       allowlist_reason: allow.reason,
       allowlist_expires_at: allow.expiresAt,
       allowlist_expired: allow.expired,
+      epss: enriched.epss,
+      kev: enriched.kev,
       excluded,
       baseline_matched: baselineMatched,
       gate_effect: gateEffect,
@@ -52393,6 +52490,8 @@ function buildReasons(input) {
   if (inScope.some((finding) => finding.category === "sast")) pushCode(codes, "SAST_FINDING");
   if (inScope.some((finding) => finding.category === "container")) pushCode(codes, "CONTAINER_VULNERABILITY");
   if (inScope.some((finding) => finding.category === "license")) pushCode(codes, "LICENSE_ISSUE");
+  if (input.findings.some((finding) => finding.kev)) pushCode(codes, "KEV_MATCHED");
+  if (input.findings.some((finding) => finding.epss !== null)) pushCode(codes, "EPSS_ENRICHED");
   if (input.findings.some((finding) => finding.environment === "production")) {
     pushCode(codes, "PRODUCTION_ENVIRONMENT");
   }
@@ -52741,7 +52840,8 @@ async function runSentinel(params) {
     gateScope: options.gate_scope,
     gateMode: options.gate_mode,
     baselineFingerprints: params.baselineFingerprints,
-    changedPaths: options.changed_paths_unknown ? null : params.changedPaths
+    changedPaths: options.changed_paths_unknown ? null : params.changedPaths,
+    enrichment: params.enrichment
   });
   const ordered = prioritizeFindings(findings);
   const sample = sampleForJev(ordered, options.max_findings_to_jev);
@@ -52899,6 +52999,7 @@ async function main() {
   const dryRun = optionalBoolean("dry_run", false);
   const comment = optionalBoolean("comment_on_github", config2.comment_on_github ?? false);
   const createCheckRun = optionalBoolean("create_check_run", config2.create_check_run ?? true);
+  const enrichEpssKev = optionalBoolean("enrich_epss_kev", false);
   const annotate = optionalBoolean("annotate", config2.annotate ?? true);
   const token = core.getInput("github_token") || process.env.GITHUB_TOKEN || "";
   const remoteErrors = [];
@@ -53041,6 +53142,18 @@ async function main() {
       }
     }
   }
+  let enrichment = { kev: /* @__PURE__ */ new Set(), epss: /* @__PURE__ */ new Map() };
+  if (enrichEpssKev) {
+    const cves = loaded.findings.map((finding) => finding.cve).filter((cve) => Boolean(cve));
+    const enriched = await loadEnrichmentMaps({ cves, timeoutMs });
+    enrichment = enriched.maps;
+    remoteErrors.push(...enriched.errors);
+    core.info(
+      formatActionMessage(
+        `Enrichment: KEV=${enrichment.kev.size} CVEs loaded, EPSS scores=${enrichment.epss.size}`
+      )
+    );
+  }
   core.info(formatActionMessage(`Jev provider: ${jevProvider}`));
   core.info(
     formatActionMessage(
@@ -53107,6 +53220,7 @@ async function main() {
     policy,
     changedPaths,
     baselineFingerprints,
+    enrichment,
     provider,
     commentClient,
     checkRunClient,
@@ -53127,6 +53241,7 @@ async function main() {
       dry_run: dryRun,
       comment_on_github: comment,
       create_check_run: createCheckRun,
+      enrich_epss_kev: enrichEpssKev,
       annotate,
       max_findings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
       max_findings_to_jev: Number(core.getInput("max_findings_to_jev") || config2.max_findings_to_jev || 40),
