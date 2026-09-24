@@ -1,0 +1,19 @@
+jev_provider: vercel-ai-gateway
+min_confidence: 0.75
+low_confidence_policy: fail
+source_error_policy: fail
+review_mode: fail
+environment: production
+gate_scope: changed
+block_secrets: true
+escalate_known_exploited: true
+escalate_poc: true
+policy_id: default-gate
+allowlist:
+  rule_ids: []
+  cves: []
+  fingerprints: []
+  paths: []
+  ids: []
+exclude_paths:
+  - "tests/fixtures/**"

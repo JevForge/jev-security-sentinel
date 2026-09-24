@@ -1,0 +1,163 @@
+name: JEV Security Sentinel
+description: >
+  Contextual security gate for SAST, SCA, IaC, secrets, and container findings.
+  Jev proposes PASS, WARN, BLOCK, or REVIEW. A deterministic policy keeps every
+  finding visible and can only make the gate stricter.
+author: JevForge
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  findings:
+    description: Inline JSON array of normalized findings, or an object with findings[].
+    required: false
+  findings_path:
+    description: Workspace path to normalized findings JSON.
+    required: false
+  sarif_path:
+    description: Workspace path to a SARIF 2.1.0 report.
+    required: false
+  semgrep_path:
+    description: Workspace path to Semgrep JSON (results[] or findings[]).
+    required: false
+  trivy_path:
+    description: Workspace path to a Trivy JSON report.
+    required: false
+  snyk_path:
+    description: Workspace path to Snyk CLI JSON or Snyk REST issues JSON.
+    required: false
+  veracode_path:
+    description: Workspace path to a Veracode findings JSON export.
+    required: false
+  fetch_ghas:
+    description: Fetch open GitHub code scanning, secret scanning, and Dependabot alerts.
+    required: false
+    default: 'false'
+  fetch_snyk:
+    description: Fetch Snyk REST issues. Requires SNYK_TOKEN and snyk_org_id.
+    required: false
+    default: 'false'
+  snyk_org_id:
+    description: Snyk organization id used when fetch_snyk is true.
+    required: false
+  snyk_api_base:
+    description: Optional Snyk API origin, for example https://api.eu.snyk.io.
+    required: false
+  fetch_veracode:
+    description: Fetch Veracode findings. Requires VERACODE_API_ID, VERACODE_API_KEY, and veracode_app_guid.
+    required: false
+    default: 'false'
+  veracode_app_guid:
+    description: Veracode application GUID used when fetch_veracode is true.
+    required: false
+  fetch_semgrep:
+    description: Fetch Semgrep App findings. Requires SEMGREP_APP_TOKEN and semgrep_deployment_id.
+    required: false
+    default: 'false'
+  semgrep_deployment_id:
+    description: Semgrep deployment id or slug used when fetch_semgrep is true.
+    required: false
+  environment:
+    description: production | staging | development | test | unknown. Default production.
+    required: false
+    default: production
+  component:
+    description: Component name included in the Jev context.
+    required: false
+  gate_scope:
+    description: all | changed. On pull_request the default is changed; otherwise all.
+    required: false
+  changed_paths:
+    description: JSON array of paths in the change set. On pull_request this is loaded from the API when omitted.
+    required: false
+  min_confidence:
+    description: Minimum Jev confidence (0-1) required to trust the proposal.
+    required: false
+    default: '0.75'
+  low_confidence_policy:
+    description: fail | warn | request-review | no-op. Applies when Jev is unavailable, rejected, or below min_confidence.
+    required: false
+    default: fail
+  source_error_policy:
+    description: fail | warn. fail raises the gate to at least REVIEW when a configured source cannot be read.
+    required: false
+    default: fail
+  review_mode:
+    description: fail | continue. fail makes REVIEW fail the job. BLOCK always fails the job.
+    required: false
+    default: fail
+  jev_provider:
+    description: vercel-ai-gateway | typesafe-native | custom-compatible. No silent fallback.
+    required: false
+    default: vercel-ai-gateway
+  jev_endpoint:
+    description: HTTPS evaluate endpoint. Required for custom-compatible.
+    required: false
+  jev_model:
+    description: Catalog model id for typesafe-native and custom-compatible. Gateway default is typesafe-ai/jev.
+    required: false
+  timeout_ms:
+    description: Remote call timeout in milliseconds.
+    required: false
+    default: '45000'
+  max_findings:
+    description: Maximum findings preserved. Overflow is truncated and the gate becomes at least REVIEW.
+    required: false
+    default: '2000'
+  max_findings_to_jev:
+    description: How many prioritized findings are sampled for Jev. The policy still sees every finding.
+    required: false
+    default: '40'
+  comment_on_github:
+    description: Post a summary comment on the pull request or issue.
+    required: false
+    default: 'false'
+  annotate:
+    description: Emit workflow annotations for in-scope findings.
+    required: false
+    default: 'true'
+  dry_run:
+    description: Skip comments and annotations.
+    required: false
+    default: 'false'
+  github_token:
+    description: Token for pull request files, comments, and optional GitHub Advanced Security reads.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  decision:
+    description: PASS | WARN | BLOCK | REVIEW
+  confidence:
+    description: Confidence between 0 and 1. 0 when Jev did not evaluate.
+  reason_codes:
+    description: JSON array of stable reason codes.
+  findings:
+    description: JSON array of every preserved finding. Empty when spilled to findings_file.
+  findings_file:
+    description: Workspace file containing findings when the output would exceed the size limit.
+  findings_count:
+    description: Number of preserved findings.
+  findings_spilled:
+    description: true when findings were written to findings_file.
+  risk_summary:
+    description: JSON risk summary. Counts include allowlisted and out-of-scope findings.
+  provisional:
+    description: true when the final decision is not a confident Jev evaluation.
+  jev_status:
+    description: evaluated | unavailable | schema_rejected
+  jev_proposed:
+    description: Decision proposed by Jev, or empty when Jev did not evaluate.
+  policy_floor:
+    description: Deterministic floor. The final decision is never weaker than this floor.
+  policy_id:
+    description: Policy identifier.
+  blocking_count:
+    description: Findings whose gate effect is blocking.
+  summary:
+    description: One-line decision summary.
+
+runs:
+  using: node24
+  main: dist/index.js
