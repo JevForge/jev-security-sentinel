@@ -121,6 +121,10 @@ inputs:
     description: Create a completed Checks API run named JEV Security Sentinel.
     required: false
     default: 'true'
+  enrich_epss_kev:
+    description: Enrich CVE findings with CISA KEV membership and FIRST EPSS scores (network call).
+    required: false
+    default: 'false'
   annotate:
     description: Emit workflow annotations for in-scope findings.
     required: false

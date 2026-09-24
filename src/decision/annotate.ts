@@ -1,3 +1,5 @@
+import type { EnrichmentMaps } from '../collectors/enrichment.js';
+import { applyEnrichment } from '../collectors/enrichment.js';
 import type {
   EnvironmentName,
   Exploitability,
@@ -155,15 +157,19 @@ export function annotateFindings(input: {
   gateMode?: GateMode;
   baselineFingerprints?: Set<string>;
   changedPaths: string[] | null;
+  enrichment?: EnrichmentMaps;
   now?: Date;
 }): Finding[] {
   const gateMode = input.gateMode ?? 'all';
   const baseline = input.baselineFingerprints ?? new Set<string>();
+  const enrichment = input.enrichment ?? { kev: new Set<string>(), epss: new Map<string, number>() };
   const now = input.now ?? new Date();
   const seen = new Map<string, number>();
   return input.raw.map(raw => {
-    const exploitability: Exploitability =
-      raw.category === 'secrets' && raw.exploitability === 'unknown' ? 'likely' : raw.exploitability;
+    const enriched = applyEnrichment(raw.cve, raw.exploitability, enrichment);
+    const exploitability = (
+      raw.category === 'secrets' && enriched.exploitability === 'unknown' ? 'likely' : enriched.exploitability
+    ) as Exploitability;
     const baseId = fingerprint([
       raw.source,
       raw.rule_id,
@@ -219,6 +225,8 @@ export function annotateFindings(input: {
       allowlist_reason: allow.reason,
       allowlist_expires_at: allow.expiresAt,
       allowlist_expired: allow.expired,
+      epss: enriched.epss,
+      kev: enriched.kev,
       excluded,
       baseline_matched: baselineMatched,
       gate_effect: gateEffect,

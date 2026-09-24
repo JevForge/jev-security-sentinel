@@ -119,6 +119,8 @@ export const REASON_CODES = [
   'BLOCK_SECRETS',
   'BASELINE_MATCHED',
   'NEW_FINDINGS_ONLY',
+  'KEV_MATCHED',
+  'EPSS_ENRICHED',
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 

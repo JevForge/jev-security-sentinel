@@ -3,6 +3,7 @@ import * as github from '@actions/github';
 import { loadFileConfig, policyFromConfig, coalesceEnvironment, coalescePolicy, coalesceProvider, coalesceReviewMode, coalesceScope, coalesceSourceErrors, pickEnum } from './collectors/config.js';
 import { loadFindings } from './collectors/load.js';
 import { loadBaselineFingerprints } from './collectors/baseline.js';
+import { loadEnrichmentMaps } from './collectors/enrichment.js';
 import { listChangedPaths } from './collectors/github-context.js';
 import { fetchGhasAlerts, fetchSemgrepFindings, fetchSnykIssues, fetchVeracodeFindings, safeRemoteMessage } from './collectors/remote.js';
 import { createJevProvider } from './jev/core/index.js';
@@ -47,6 +48,7 @@ async function main(): Promise<void> {
   const dryRun = optionalBoolean('dry_run', false);
   const comment = optionalBoolean('comment_on_github', config.comment_on_github ?? false);
   const createCheckRun = optionalBoolean('create_check_run', config.create_check_run ?? true);
+  const enrichEpssKev = optionalBoolean('enrich_epss_kev', false);
   const annotate = optionalBoolean('annotate', config.annotate ?? true);
   const token = core.getInput('github_token') || process.env.GITHUB_TOKEN || '';
 
@@ -205,6 +207,21 @@ async function main(): Promise<void> {
     }
   }
 
+  let enrichment = { kev: new Set<string>(), epss: new Map<string, number>() };
+  if (enrichEpssKev) {
+    const cves = loaded.findings
+      .map(finding => finding.cve)
+      .filter((cve): cve is string => Boolean(cve));
+    const enriched = await loadEnrichmentMaps({ cves, timeoutMs });
+    enrichment = enriched.maps;
+    remoteErrors.push(...enriched.errors);
+    core.info(
+      formatActionMessage(
+        `Enrichment: KEV=${enrichment.kev.size} CVEs loaded, EPSS scores=${enrichment.epss.size}`,
+      ),
+    );
+  }
+
   core.info(formatActionMessage(`Jev provider: ${jevProvider}`));
   core.info(
     formatActionMessage(
@@ -290,6 +307,7 @@ async function main(): Promise<void> {
     policy,
     changedPaths,
     baselineFingerprints,
+    enrichment,
     provider,
     commentClient,
     checkRunClient,
@@ -310,6 +328,7 @@ async function main(): Promise<void> {
       dry_run: dryRun,
       comment_on_github: comment,
       create_check_run: createCheckRun,
+      enrich_epss_kev: enrichEpssKev,
       annotate: annotate,
       max_findings: Number(core.getInput('max_findings') || config.max_findings || 2000),
       max_findings_to_jev: Number(core.getInput('max_findings_to_jev') || config.max_findings_to_jev || 40),
