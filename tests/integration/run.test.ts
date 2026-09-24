@@ -101,6 +101,7 @@ describe('runSentinel', () => {
         review: 0,
         allowlisted: 0,
         out_of_scope: 0,
+        baseline: 0,
         by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0 },
         by_category: { sast: 0, sca: 0, iac: 0, secrets: 0, container: 0, license: 0, other: 0 },
         highest_severity: 'none' as const,

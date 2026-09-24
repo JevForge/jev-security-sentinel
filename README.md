@@ -192,6 +192,8 @@ More workflows: [`examples/gate.yml`](examples/gate.yml), [`examples/pr-gate.yml
 | `environment` | no | `production` | `production` \| `staging` \| `development` \| `test` \| `unknown` |
 | `component` | no | — | Component name sent in Jev context |
 | `gate_scope` | no | `changed` on PR, else `all` | `all` \| `changed` |
+| `gate_mode` | no | `all` | `all` \| `new_only` (baseline comparison) |
+| `baseline_path` | no | — | Baseline fingerprints JSON (required for `new_only`) |
 | `changed_paths` | no | PR files via API | JSON array of paths |
 | `min_confidence` | no | `0.75` | Minimum Jev confidence to trust the proposal |
 | `low_confidence_policy` | no | `fail` | `fail` \| `warn` \| `request-review` \| `no-op` |
@@ -293,6 +295,8 @@ Default **production** floor:
 * proof-of-concept at high → block; at medium → review
 
 On pull requests, `gate_scope: changed` marks findings outside the diff as `out_of_scope` (still listed). If changed paths cannot be loaded, findings are treated as in scope.
+
+Use `gate_mode: new_only` with `baseline_path` to raise the floor only for findings whose fingerprint is absent from the baseline. Baseline matches stay visible as `gate_effect: baseline`.
 
 | `low_confidence_policy` | Behavior |
 | --- | --- |

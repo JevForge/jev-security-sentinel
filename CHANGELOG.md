@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-24
+
+### Added
+
+* `gate_mode: new_only` with `baseline_path` so only findings absent from a baseline fingerprint set raise the policy floor.
+* Baseline matches stay visible as `gate_effect: baseline` with reason codes `BASELINE_MATCHED` and `NEW_FINDINGS_ONLY`.
+
 ## [0.1.1] - 2026-09-24
 
 ### Changed
