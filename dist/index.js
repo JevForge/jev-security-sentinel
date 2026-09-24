@@ -36318,6 +36318,7 @@ var RunOptionsSchema = external_exports.object({
   timeout_ms: external_exports.number().int().positive().max(12e4).default(45e3),
   dry_run: external_exports.boolean().default(false),
   comment_on_github: external_exports.boolean().default(false),
+  create_check_run: external_exports.boolean().default(true),
   annotate: external_exports.boolean().default(true),
   max_findings: external_exports.number().int().positive().max(5e3).default(2e3),
   max_findings_to_jev: external_exports.number().int().positive().max(100).default(40),
@@ -36347,6 +36348,7 @@ var FileConfigSchema = external_exports.object({
   exclude_paths: external_exports.array(external_exports.string()).optional(),
   policy_id: external_exports.string().optional(),
   comment_on_github: external_exports.boolean().optional(),
+  create_check_run: external_exports.boolean().optional(),
   annotate: external_exports.boolean().optional(),
   max_findings: external_exports.number().int().positive().max(5e3).optional(),
   max_findings_to_jev: external_exports.number().int().positive().max(100).optional()
@@ -52515,6 +52517,7 @@ function planEffects(input) {
   else if (input.actionStatus === "request-review") effects.push("request-review");
   else if (input.actionStatus === "no-op") effects.push("no-op");
   if (input.comment) effects.push("pull-request-comment");
+  if (input.checkRun) effects.push("check-run");
   const annotations = [];
   if (input.annotate) {
     effects.push("file-annotation");
@@ -52540,8 +52543,10 @@ function planEffects(input) {
 }
 
 // src/executors/comment.ts
+var COMMENT_MARKER = "<!-- jev-security-sentinel -->";
 function buildCommentMarkdown(decision) {
   const lines = [
+    COMMENT_MARKER,
     "### JEV Security Sentinel",
     "",
     `- **Decision:** \`${decision.decision}\``,
@@ -52570,9 +52575,62 @@ function buildCommentMarkdown(decision) {
 }
 async function maybePostComment(enabled, dryRun, decision, client) {
   if (!enabled) return "skipped";
+  const body = buildCommentMarkdown(decision);
   if (dryRun || !client) return "dry-run";
-  await client.createComment(buildCommentMarkdown(decision));
+  const existing = (await client.listComments()).find((comment) => comment.body.includes(COMMENT_MARKER));
+  if (existing) {
+    await client.updateComment(existing.id, body);
+    return "updated";
+  }
+  await client.createComment(body);
   return "posted";
+}
+
+// src/executors/check-run.ts
+function checkConclusion(actionStatus) {
+  if (actionStatus === "ok") return "success";
+  if (actionStatus === "fail") return "failure";
+  return "neutral";
+}
+function buildCheckSummary(decision) {
+  const top = decision.findings.slice(0, 10);
+  const rows = top.map((finding) => {
+    const path = finding.path ? `${finding.path}${finding.start_line ? `:${finding.start_line}` : ""}` : "n/a";
+    return `| ${finding.severity} | ${finding.category} | ${finding.rule_id.replaceAll("|", "/")} | ${path.replaceAll("|", "/")} | ${finding.gate_effect} |`;
+  });
+  return [
+    "### JEV Security Sentinel",
+    "",
+    "| Field | Value |",
+    "| --- | --- |",
+    `| Decision | \`${decision.decision}\` |`,
+    `| Policy floor | \`${decision.policy_floor}\` |`,
+    `| Jev proposed | \`${decision.jev_proposed ?? "none"}\` |`,
+    `| Jev status | \`${decision.jev_status}\` |`,
+    `| Confidence | ${decision.confidence.toFixed(3)} |`,
+    `| Provisional | ${decision.provisional ? "yes" : "no"} |`,
+    `| Findings | ${decision.risk_summary.total} visible / ${decision.risk_summary.blocking} blocking |`,
+    `| Reason codes | ${decision.reason_codes.map((code) => `\`${code}\``).join(", ") || "`none`"} |`,
+    "",
+    "| Severity | Category | Rule | Path | Gate |",
+    "| --- | --- | --- | --- | --- |",
+    ...rows.length > 0 ? rows : ["| \u2014 | \u2014 | \u2014 | \u2014 | \u2014 |"],
+    "",
+    "_Every collected finding stays visible. Allowlisting changes the gate effect only._"
+  ].join("\n");
+}
+async function maybeCreateCheckRun(enabled, dryRun, headSha, decision, actionStatus, client) {
+  if (!enabled) return "skipped";
+  if (!headSha) return "skipped";
+  if (dryRun || !client) return "dry-run";
+  await client.createCheckRun({
+    name: "JEV Security Sentinel",
+    headSha,
+    conclusion: checkConclusion(actionStatus),
+    title: `${decision.decision} \xB7 floor ${decision.policy_floor}`,
+    summary: buildCheckSummary(decision)
+  });
+  return "created";
 }
 
 // src/run.ts
@@ -52627,7 +52685,8 @@ async function runSentinel(params) {
     decision: outcome.decision,
     actionStatus: outcome.action_status,
     annotate: options.annotate,
-    comment: options.comment_on_github
+    comment: options.comment_on_github,
+    checkRun: options.create_check_run
   });
   const commentStatus = await maybePostComment(
     options.comment_on_github,
@@ -52635,11 +52694,20 @@ async function runSentinel(params) {
     outcome.decision,
     params.commentClient ?? null
   );
+  const checkStatus = await maybeCreateCheckRun(
+    options.create_check_run,
+    options.dry_run,
+    params.headSha ?? null,
+    outcome.decision,
+    outcome.action_status,
+    params.checkRunClient ?? null
+  );
   return {
     decision: outcome.decision,
     outcome,
     effects,
     commentStatus,
+    checkStatus,
     findings: outcome.decision.findings
   };
 }
@@ -52733,6 +52801,7 @@ async function main() {
   const timeoutMs = Number(core.getInput("timeout_ms") || 45e3);
   const dryRun = optionalBoolean("dry_run", false);
   const comment = optionalBoolean("comment_on_github", config2.comment_on_github ?? false);
+  const createCheckRun = optionalBoolean("create_check_run", config2.create_check_run ?? true);
   const annotate = optionalBoolean("annotate", config2.annotate ?? true);
   const token = core.getInput("github_token") || process.env.GITHUB_TOKEN || "";
   const remoteErrors = [];
@@ -52891,12 +52960,46 @@ async function main() {
   const pullNumber = github.context.payload.pull_request?.number ?? github.context.payload.issue?.number;
   const octokit = token ? github.getOctokit(token) : null;
   const commentClient = octokit && pullNumber ? {
+    async listComments() {
+      const comments = await octokit.paginate(octokit.rest.issues.listComments, {
+        owner: github.context.repo.owner,
+        repo: github.context.repo.repo,
+        issue_number: Number(pullNumber),
+        per_page: 100
+      });
+      return comments.map((comment2) => ({ id: comment2.id, body: comment2.body ?? "" }));
+    },
     async createComment(body) {
       await octokit.rest.issues.createComment({
         owner: github.context.repo.owner,
         repo: github.context.repo.repo,
         issue_number: Number(pullNumber),
         body
+      });
+    },
+    async updateComment(id, body) {
+      await octokit.rest.issues.updateComment({
+        owner: github.context.repo.owner,
+        repo: github.context.repo.repo,
+        comment_id: id,
+        body
+      });
+    }
+  } : null;
+  const headSha = github.context.payload.pull_request?.head?.sha ?? github.context.sha ?? null;
+  const checkRunClient = octokit ? {
+    async createCheckRun(input) {
+      await octokit.rest.checks.create({
+        owner: github.context.repo.owner,
+        repo: github.context.repo.repo,
+        name: input.name,
+        head_sha: input.headSha,
+        status: "completed",
+        conclusion: input.conclusion,
+        output: {
+          title: input.title,
+          summary: input.summary
+        }
       });
     }
   } : null;
@@ -52909,6 +53012,8 @@ async function main() {
     baselineFingerprints,
     provider,
     commentClient,
+    checkRunClient,
+    headSha,
     options: {
       environment,
       component: core.getInput("component") || config2.component || "",
@@ -52924,6 +53029,7 @@ async function main() {
       timeout_ms: timeoutMs,
       dry_run: dryRun,
       comment_on_github: comment,
+      create_check_run: createCheckRun,
       annotate,
       max_findings: Number(core.getInput("max_findings") || config2.max_findings || 2e3),
       max_findings_to_jev: Number(core.getInput("max_findings_to_jev") || config2.max_findings_to_jev || 40),
@@ -52939,6 +53045,7 @@ async function main() {
     notice: (message, properties) => core.notice(message, properties)
   };
   writeDecisionOutputs(writer, result.decision, result.outcome.action_status, workspace);
+  core.setOutput("check_status", result.checkStatus);
   if (!dryRun) {
     for (const annotation of result.effects.annotations) {
       const payload = {
@@ -52952,6 +53059,7 @@ async function main() {
     }
   }
   core.info(formatActionMessage(`Comment: ${result.commentStatus}`));
+  core.info(formatActionMessage(`Check run: ${result.checkStatus}`));
   core.info(formatActionMessage(`Effects: ${result.effects.effects.join(",")}`));
 }
 main().catch((error2) => {
