@@ -100,6 +100,7 @@ describe('deterministic gate', () => {
         fingerprints: [],
         paths: [],
         ids: [],
+        entries: [],
       },
     });
     const outcome = run({ policy, jev: 'PASS' });

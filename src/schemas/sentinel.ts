@@ -38,6 +38,10 @@ export const FindingSchema = z
     exploitability: z.enum(EXPLOITABILITIES),
     in_change: z.boolean(),
     allowlisted: z.boolean(),
+    allowlist_owner: z.string().max(128).nullable().default(null),
+    allowlist_reason: z.string().max(500).nullable().default(null),
+    allowlist_expires_at: z.string().max(32).nullable().default(null),
+    allowlist_expired: z.boolean().default(false),
     excluded: z.boolean(),
     baseline_matched: z.boolean().default(false),
     gate_effect: z.enum(GATE_EFFECTS),
@@ -183,6 +187,31 @@ export const EnvRulesSchema = z
 
 export type EnvRules = z.infer<typeof EnvRulesSchema>;
 
+export const AllowlistEntrySchema = z
+  .object({
+    rule_id: z.string().min(1).max(256).optional(),
+    cve: z.string().min(1).max(64).optional(),
+    fingerprint: z.string().min(1).max(128).optional(),
+    path: z.string().min(1).max(256).optional(),
+    id: z.string().min(1).max(256).optional(),
+    owner: z.string().min(1).max(128),
+    reason: z.string().min(8).max(500),
+    expires_at: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'expires_at must be YYYY-MM-DD'),
+  })
+  .strict()
+  .superRefine((entry, ctx) => {
+    if (!entry.rule_id && !entry.cve && !entry.fingerprint && !entry.path && !entry.id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Allowlist entry needs rule_id, cve, fingerprint, path, or id',
+      });
+    }
+  });
+
+export type AllowlistEntry = z.infer<typeof AllowlistEntrySchema>;
+
 export const AllowlistSchema = z
   .object({
     rule_ids: z.array(z.string().min(1).max(256)).max(500).default([]),
@@ -190,8 +219,11 @@ export const AllowlistSchema = z
     fingerprints: z.array(z.string().min(1).max(128)).max(500).default([]),
     paths: z.array(z.string().min(1).max(256)).max(200).default([]),
     ids: z.array(z.string().min(1).max(256)).max(500).default([]),
+    entries: z.array(AllowlistEntrySchema).max(500).default([]),
   })
   .strict();
+
+export type Allowlist = z.infer<typeof AllowlistSchema>;
 
 export const GatePolicySchema = z
   .object({
@@ -233,7 +265,7 @@ export const DEFAULT_POLICY: GatePolicy = {
     test: closed(['critical'], ['unknown'], ['high', 'medium']),
     unknown: closed(['critical', 'high'], ['medium', 'unknown'], []),
   },
-  allowlist: { rule_ids: [], cves: [], fingerprints: [], paths: [], ids: [] },
+  allowlist: { rule_ids: [], cves: [], fingerprints: [], paths: [], ids: [], entries: [] },
   exclude_paths: [],
 };
 

@@ -36075,6 +36075,8 @@ var REASON_CODES = [
   "STAGING_ENVIRONMENT",
   "CHANGED_CODE",
   "ALLOWLIST_APPLIED",
+  "ALLOWLIST_EXPIRED",
+  "ALLOWLIST_UNAUDITED",
   "POLICY_FLOOR_BLOCK",
   "POLICY_FLOOR_WARN",
   "POLICY_FLOOR_REVIEW",
@@ -36128,6 +36130,10 @@ var FindingSchema = external_exports.object({
   exploitability: external_exports.enum(EXPLOITABILITIES),
   in_change: external_exports.boolean(),
   allowlisted: external_exports.boolean(),
+  allowlist_owner: external_exports.string().max(128).nullable().default(null),
+  allowlist_reason: external_exports.string().max(500).nullable().default(null),
+  allowlist_expires_at: external_exports.string().max(32).nullable().default(null),
+  allowlist_expired: external_exports.boolean().default(false),
   excluded: external_exports.boolean(),
   baseline_matched: external_exports.boolean().default(false),
   gate_effect: external_exports.enum(GATE_EFFECTS),
@@ -36241,12 +36247,30 @@ var EnvRulesSchema = external_exports.object({
   review: external_exports.array(external_exports.enum(SEVERITIES)).max(6),
   warn: external_exports.array(external_exports.enum(SEVERITIES)).max(6)
 }).strict();
+var AllowlistEntrySchema = external_exports.object({
+  rule_id: external_exports.string().min(1).max(256).optional(),
+  cve: external_exports.string().min(1).max(64).optional(),
+  fingerprint: external_exports.string().min(1).max(128).optional(),
+  path: external_exports.string().min(1).max(256).optional(),
+  id: external_exports.string().min(1).max(256).optional(),
+  owner: external_exports.string().min(1).max(128),
+  reason: external_exports.string().min(8).max(500),
+  expires_at: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expires_at must be YYYY-MM-DD")
+}).strict().superRefine((entry, ctx) => {
+  if (!entry.rule_id && !entry.cve && !entry.fingerprint && !entry.path && !entry.id) {
+    ctx.addIssue({
+      code: external_exports.ZodIssueCode.custom,
+      message: "Allowlist entry needs rule_id, cve, fingerprint, path, or id"
+    });
+  }
+});
 var AllowlistSchema = external_exports.object({
   rule_ids: external_exports.array(external_exports.string().min(1).max(256)).max(500).default([]),
   cves: external_exports.array(external_exports.string().min(1).max(64)).max(500).default([]),
   fingerprints: external_exports.array(external_exports.string().min(1).max(128)).max(500).default([]),
   paths: external_exports.array(external_exports.string().min(1).max(256)).max(200).default([]),
-  ids: external_exports.array(external_exports.string().min(1).max(256)).max(500).default([])
+  ids: external_exports.array(external_exports.string().min(1).max(256)).max(500).default([]),
+  entries: external_exports.array(AllowlistEntrySchema).max(500).default([])
 }).strict();
 var GatePolicySchema = external_exports.object({
   id: external_exports.string().min(1).max(128),
@@ -36280,7 +36304,7 @@ var DEFAULT_POLICY = {
     test: closed(["critical"], ["unknown"], ["high", "medium"]),
     unknown: closed(["critical", "high"], ["medium", "unknown"], [])
   },
-  allowlist: { rule_ids: [], cves: [], fingerprints: [], paths: [], ids: [] },
+  allowlist: { rule_ids: [], cves: [], fingerprints: [], paths: [], ids: [], entries: [] },
   exclude_paths: []
 };
 function withoutUndefined(value) {
@@ -36370,7 +36394,8 @@ function policyFromConfig(config2) {
       cves: config2.allowlist.cves ?? [],
       fingerprints: config2.allowlist.fingerprints ?? [],
       paths: config2.allowlist.paths ?? [],
-      ids: config2.allowlist.ids ?? []
+      ids: config2.allowlist.ids ?? [],
+      entries: config2.allowlist.entries ?? []
     } : void 0,
     exclude_paths: config2.exclude_paths
   });
@@ -52206,9 +52231,65 @@ function pathInChange(filePath, changed) {
     return norm === item || norm.endsWith(`/${item}`) || item.endsWith(`/${norm}`);
   });
 }
+function isAllowlistExpired(expiresAt, now = /* @__PURE__ */ new Date()) {
+  const end = Date.parse(`${expiresAt}T23:59:59.999Z`);
+  if (Number.isNaN(end)) return true;
+  return now.getTime() > end;
+}
+function entryMatches(entry, raw, id, baseFingerprint) {
+  if (entry.rule_id && entry.rule_id === raw.rule_id) return true;
+  if (entry.id && entry.id === id) return true;
+  if (entry.fingerprint && entry.fingerprint === baseFingerprint) return true;
+  if (entry.cve && raw.cve && entry.cve.toUpperCase() === raw.cve.toUpperCase()) return true;
+  if (entry.path && raw.path && matchGlob(entry.path, raw.path)) return true;
+  return false;
+}
+function resolveAllowlist(input) {
+  for (const entry of input.policy.allowlist.entries) {
+    if (!entryMatches(entry, input.raw, input.id, input.baseFingerprint)) continue;
+    if (isAllowlistExpired(entry.expires_at, input.now)) {
+      return {
+        allowlisted: false,
+        unaudited: false,
+        expired: true,
+        owner: entry.owner,
+        reason: entry.reason,
+        expiresAt: entry.expires_at
+      };
+    }
+    return {
+      allowlisted: true,
+      unaudited: false,
+      expired: false,
+      owner: entry.owner,
+      reason: entry.reason,
+      expiresAt: entry.expires_at
+    };
+  }
+  const legacy = input.raw.scanner_suppressed || input.policy.allowlist.rule_ids.includes(input.raw.rule_id) || input.policy.allowlist.ids.includes(input.id) || input.policy.allowlist.fingerprints.includes(input.baseFingerprint) || (input.raw.cve ? input.policy.allowlist.cves.some((cve) => cve.toUpperCase() === input.raw.cve?.toUpperCase()) : false) || matchesAnyGlob(input.policy.allowlist.paths, input.raw.path);
+  if (legacy) {
+    return {
+      allowlisted: true,
+      unaudited: !input.raw.scanner_suppressed,
+      expired: false,
+      owner: null,
+      reason: input.raw.scanner_suppressed ? "scanner_suppressed" : null,
+      expiresAt: null
+    };
+  }
+  return {
+    allowlisted: false,
+    unaudited: false,
+    expired: false,
+    owner: null,
+    reason: null,
+    expiresAt: null
+  };
+}
 function annotateFindings(input) {
   const gateMode = input.gateMode ?? "all";
   const baseline = input.baselineFingerprints ?? /* @__PURE__ */ new Set();
+  const now = input.now ?? /* @__PURE__ */ new Date();
   const seen = /* @__PURE__ */ new Map();
   return input.raw.map((raw) => {
     const exploitability = raw.category === "secrets" && raw.exploitability === "unknown" ? "likely" : raw.exploitability;
@@ -52224,12 +52305,18 @@ function annotateFindings(input) {
     seen.set(baseId, count + 1);
     const id = `${raw.source}:${count === 0 ? baseId : `${baseId}:${count}`}`;
     const excluded = matchesAnyGlob(input.policy.exclude_paths, raw.path);
-    const allowlisted = raw.scanner_suppressed || input.policy.allowlist.rule_ids.includes(raw.rule_id) || input.policy.allowlist.ids.includes(id) || input.policy.allowlist.fingerprints.includes(baseId) || (raw.cve ? input.policy.allowlist.cves.some((cve) => cve.toUpperCase() === raw.cve?.toUpperCase()) : false) || matchesAnyGlob(input.policy.allowlist.paths, raw.path);
+    const allow = resolveAllowlist({
+      raw,
+      id,
+      baseFingerprint: baseId,
+      policy: input.policy,
+      now
+    });
     const inChange = pathInChange(raw.path, input.changedPaths);
     const outOfScope = excluded || input.gateScope === "changed" && !inChange;
     const baselineMatched = gateMode === "new_only" && baseline.has(baseId);
     let gateEffect = "informational";
-    if (allowlisted) gateEffect = "allowlisted";
+    if (allow.allowlisted) gateEffect = "allowlisted";
     else if (baselineMatched) gateEffect = "baseline";
     else if (outOfScope) gateEffect = "out_of_scope";
     else if (raw.category === "secrets" && input.policy.block_secrets) gateEffect = "blocking";
@@ -52256,7 +52343,11 @@ function annotateFindings(input) {
       cve: raw.cve,
       exploitability,
       in_change: inChange,
-      allowlisted,
+      allowlisted: allow.allowlisted,
+      allowlist_owner: allow.owner,
+      allowlist_reason: allow.reason,
+      allowlist_expires_at: allow.expiresAt,
+      allowlist_expired: allow.expired,
       excluded,
       baseline_matched: baselineMatched,
       gate_effect: gateEffect,
@@ -52310,6 +52401,12 @@ function buildReasons(input) {
   }
   if (inScope.some((finding) => finding.in_change)) pushCode(codes, "CHANGED_CODE");
   if (input.findings.some((finding) => finding.allowlisted)) pushCode(codes, "ALLOWLIST_APPLIED");
+  if (input.findings.some((finding) => finding.allowlist_expired)) pushCode(codes, "ALLOWLIST_EXPIRED");
+  if (input.findings.some(
+    (finding) => finding.allowlisted && finding.allowlist_owner === null && finding.allowlist_reason !== "scanner_suppressed"
+  )) {
+    pushCode(codes, "ALLOWLIST_UNAUDITED");
+  }
   if (input.findings.some((finding) => finding.baseline_matched || finding.gate_effect === "baseline")) {
     pushCode(codes, "BASELINE_MATCHED");
     pushCode(codes, "NEW_FINDINGS_ONLY");

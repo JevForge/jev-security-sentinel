@@ -79,6 +79,17 @@ function buildReasons(input: {
   }
   if (inScope.some(finding => finding.in_change)) pushCode(codes, 'CHANGED_CODE');
   if (input.findings.some(finding => finding.allowlisted)) pushCode(codes, 'ALLOWLIST_APPLIED');
+  if (input.findings.some(finding => finding.allowlist_expired)) pushCode(codes, 'ALLOWLIST_EXPIRED');
+  if (
+    input.findings.some(
+      finding =>
+        finding.allowlisted &&
+        finding.allowlist_owner === null &&
+        finding.allowlist_reason !== 'scanner_suppressed',
+    )
+  ) {
+    pushCode(codes, 'ALLOWLIST_UNAUDITED');
+  }
   if (input.findings.some(finding => finding.baseline_matched || finding.gate_effect === 'baseline')) {
     pushCode(codes, 'BASELINE_MATCHED');
     pushCode(codes, 'NEW_FINDINGS_ONLY');

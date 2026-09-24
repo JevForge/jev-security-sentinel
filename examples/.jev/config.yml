@@ -10,6 +10,7 @@ escalate_known_exploited: true
 escalate_poc: true
 policy_id: default-gate
 allowlist:
+  entries: []
   rule_ids: []
   cves: []
   fingerprints: []

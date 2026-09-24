@@ -68,6 +68,7 @@ export function policyFromConfig(config: FileConfig): GatePolicy {
           fingerprints: config.allowlist.fingerprints ?? [],
           paths: config.allowlist.paths ?? [],
           ids: config.allowlist.ids ?? [],
+          entries: config.allowlist.entries ?? [],
         }
       : undefined,
     exclude_paths: config.exclude_paths,
