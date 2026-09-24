@@ -52988,6 +52988,7 @@ async function runSentinel(params) {
 var import_node_fs5 = require("node:fs");
 var import_node_path4 = require("node:path");
 var OUTPUT_LIMIT = 6e4;
+var TOP_FINDINGS_LIMIT = 10;
 var LOG_PREFIX = "[JEV Security Sentinel]";
 function formatActionMessage(message) {
   const trimmed = message.trim();
@@ -52995,9 +52996,25 @@ function formatActionMessage(message) {
   if (trimmed.startsWith(LOG_PREFIX)) return trimmed;
   return `${LOG_PREFIX} ${trimmed}`;
 }
+function buildTopFindings(decision, limit = TOP_FINDINGS_LIMIT) {
+  return prioritizeFindings(decision.findings).filter((finding) => ["blocking", "warning", "review"].includes(finding.gate_effect)).slice(0, limit).map((finding) => ({
+    id: finding.id,
+    severity: finding.severity,
+    category: finding.category,
+    rule_id: finding.rule_id,
+    path: finding.path,
+    start_line: finding.start_line,
+    cve: finding.cve,
+    gate_effect: finding.gate_effect,
+    title: finding.title,
+    kev: finding.kev,
+    epss: finding.epss
+  }));
+}
 function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
   const findingsJson = JSON.stringify(decision.findings);
   const spilled = findingsJson.length > OUTPUT_LIMIT;
+  const topFindings = buildTopFindings(decision);
   writer.setOutput("decision", decision.decision);
   writer.setOutput("confidence", String(decision.confidence));
   writer.setOutput("reason_codes", JSON.stringify(decision.reason_codes));
@@ -53009,6 +53026,7 @@ function writeDecisionOutputs(writer, decision, actionStatus, workspace) {
   writer.setOutput("policy_id", decision.policy_id);
   writer.setOutput("blocking_count", String(decision.risk_summary.blocking));
   writer.setOutput("findings_count", String(decision.findings.length));
+  writer.setOutput("top_findings", JSON.stringify(topFindings));
   writer.setOutput(
     "summary",
     `${decision.decision} floor=${decision.policy_floor} jev=${decision.jev_proposed ?? decision.jev_status} findings=${decision.findings.length}`
