@@ -19,8 +19,8 @@ Turn scanner findings into a CI gate. Jev proposes PASS, WARN, BLOCK, or REVIEW;
 ## Publish checklist
 
 1. Public repository with root `action.yml` — done.
-2. GitHub Release with a semver tag (`v0.1.0`) — done.
+2. GitHub Release with a semver tag (`v0.1.1` or later) — use the Release workflow.
 3. Accept the GitHub Marketplace Developer Agreement for the JevForge org (one-time).
-4. Edit the release → check **Publish this Action to the GitHub Marketplace** → choose categories → update release (requires 2FA).
+4. Edit the latest release → check **Publish this Action to the GitHub Marketplace** → choose categories → update release (requires 2FA).
 
-GitHub does not expose a public API for step 4. Later version tags keep the same listing.
+Trigger a release from Actions → Release → Run workflow with version `X.Y.Z` (same flow as `jev-model-navigator`).
